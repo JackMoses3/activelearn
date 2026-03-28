@@ -41,6 +41,5 @@ yarn-error.log*
 next-env.d.ts
 
 # claude code
-.claude/
 memory/
 MEMORY.md
