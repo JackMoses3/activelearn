@@ -1,26 +1,75 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: "Inter", sans-serif;
+
+  /* Design tokens from UI reference */
+  --color-primary: #2b2220;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #413735;
+  --color-surface: #fbf9f1;
+  --color-surface-dim: #dcdad2;
+  --color-surface-bright: #fbf9f1;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f6f4ec;
+  --color-surface-container: #f0eee6;
+  --color-surface-container-high: #eae8e0;
+  --color-surface-container-highest: #e4e3db;
+  --color-on-surface: #1b1c17;
+  --color-on-surface-variant: #4e4543;
+  --color-outline: #807572;
+  --color-outline-variant: #d1c3c1;
+  --color-secondary: #5b4ac8;
+  --color-secondary-container: #8e7fff;
+  --color-on-secondary: #ffffff;
+  --color-on-secondary-container: #24008c;
+  --color-tertiary: #490f00;
+  --color-tertiary-container: #6e1b00;
+  --color-on-tertiary: #ffffff;
+  --color-on-tertiary-container: #ff7d55;
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-on-error: #ffffff;
+  --color-on-error-container: #93000a;
+  --color-inverse-surface: #30312c;
+  --color-inverse-on-surface: #f3f1e9;
+  --color-inverse-primary: #d3c3c0;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --background: #fbf9f1;
+  --foreground: #1b1c17;
+
+  /* shadcn CSS variables */
+  --radius: 0.25rem;
+  --card: #ffffff;
+  --card-foreground: #1b1c17;
+  --popover: #ffffff;
+  --popover-foreground: #1b1c17;
+  --muted: #f0eee6;
+  --muted-foreground: #4e4543;
+  --accent: #f0eee6;
+  --accent-foreground: #1b1c17;
+  --border: #d1c3c1;
+  --input: #d1c3c1;
+  --ring: #2b2220;
+}
+
+.dark {
+  --background: #1b1c17;
+  --foreground: #e4e3db;
+  --card: #2b2220;
+  --card-foreground: #e4e3db;
+  --muted: #413735;
+  --muted-foreground: #d1c3c1;
+  --border: #413735;
+  --input: #413735;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Inter", sans-serif;
 }
