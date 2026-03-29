@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "migrate": "tsx scripts/migrate.ts",
+    "deploy": "npm run migrate && vercel --prod",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

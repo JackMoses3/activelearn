@@ -117,11 +117,18 @@ function buildMcpServer(): McpServer {
 
       const stateJson = rowsToStateJson(course_name, conceptRows, historyRows);
 
+      // Compute routing hint per concept: "i-do" if new/unseen, "diagnostic" if partial/mastered
+      const routing: Record<string, "i-do" | "diagnostic"> = {};
+      for (const c of conceptRows) {
+        routing[c.concept_id] =
+          c.review_count === 0 || c.mastery_score < 0.4 ? "i-do" : "diagnostic";
+      }
+
       return {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify({ session_id: sessionId, course_id: courseId, state_json: stateJson }),
+            text: JSON.stringify({ session_id: sessionId, course_id: courseId, state_json: stateJson, routing }),
           },
         ],
       };
@@ -429,6 +436,35 @@ function buildMcpServer(): McpServer {
       await db.batch(updates);
 
       return { content: [{ type: "text" as const, text: JSON.stringify({ ok: true }) }] };
+    }
+  );
+
+  // ── save_knowledge_component ───────────────────────────────────────────────
+  server.tool(
+    "save_knowledge_component",
+    "Record a specific insight or sub-fact a student has grasped during a session. Call silently — do not announce to the student.",
+    {
+      course_id: z.string(),
+      concept_id: z.string(),
+      session_id: z.string(),
+      component_text: z.string().describe("A specific, quotable insight the student has demonstrated understanding of"),
+    },
+    async ({ course_id, concept_id, session_id, component_text }) => {
+      const now = new Date().toISOString();
+      try {
+        const result = await db.execute({
+          sql: "INSERT INTO knowledge_components (course_id, concept_id, session_id, component_text, created_at) VALUES (?, ?, ?, ?, ?)",
+          args: [course_id, concept_id, session_id, component_text, now],
+        });
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ ok: true, id: Number(result.lastInsertRowid) }) }],
+        };
+      } catch {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ ok: false, id: null }) }],
+          isError: true,
+        };
+      }
     }
   );
 

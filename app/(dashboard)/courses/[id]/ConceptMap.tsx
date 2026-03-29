@@ -316,7 +316,7 @@ export function ConceptMap({ concepts, selectedConceptId, onSelectConcept }: Pro
 
   if (concepts.length === 0) {
     return (
-      <div className="h-125 bg-surface-container-lowest rounded-xl border border-outline-variant/30 flex flex-col items-center justify-center gap-3">
+      <div className="h-full bg-surface-container-lowest rounded-xl border border-outline-variant/30 flex flex-col items-center justify-center gap-3">
         <div className="w-10 h-10 rounded-full bg-surface-container-low flex items-center justify-center">
           <span className="material-symbols-outlined text-on-surface-variant/40 text-xl">
             account_tree
@@ -342,7 +342,7 @@ export function ConceptMap({ concepts, selectedConceptId, onSelectConcept }: Pro
   }
 
   return (
-    <div className="h-150 bg-surface-container-lowest rounded-xl border border-outline-variant/20 overflow-hidden shadow-sm relative">
+    <div className="h-full bg-surface-container-lowest rounded-xl border border-outline-variant/20 overflow-hidden shadow-sm relative">
       <ReactFlow
         nodes={nodes}
         edges={edges}

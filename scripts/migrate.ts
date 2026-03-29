@@ -89,6 +89,16 @@ CREATE TABLE IF NOT EXISTS documents (
   filename TEXT NOT NULL,
   uploaded_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS knowledge_components (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  course_id TEXT NOT NULL,
+  concept_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  component_text TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (course_id) REFERENCES courses(id)
+);
 `;
 
 async function migrate() {

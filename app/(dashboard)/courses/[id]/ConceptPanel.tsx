@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ConceptMastery, MasteryHistoryEntry } from "@/lib/queries";
+import { ConceptMastery, KnowledgeComponent, MasteryHistoryEntry } from "@/lib/queries";
 
 function toTitleCase(str: string): string {
   return str.replace(/\b\w/g, (c) => c.toUpperCase());
@@ -45,14 +45,23 @@ function isOverdue(nextReview: string | null): boolean {
 
 export function ConceptPanel({ courseId, concept, allConcepts, onClose }: Props) {
   const [history, setHistory] = useState<MasteryHistoryEntry[]>([]);
+  const [kcs, setKcs] = useState<KnowledgeComponent[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
   useEffect(() => {
     setLoadingHistory(true);
-    fetch(`/api/dashboard/courses/${courseId}/concepts/${concept.concept_id}/history`)
-      .then((r) => r.json())
-      .then((data) => setHistory(data))
-      .catch(() => setHistory([]))
+    Promise.all([
+      fetch(`/api/dashboard/courses/${courseId}/concepts/${concept.concept_id}/history`).then((r) => r.json()),
+      fetch(`/api/dashboard/courses/${courseId}/concepts/${concept.concept_id}/knowledge-components`).then((r) => r.json()),
+    ])
+      .then(([histData, kcsData]) => {
+        setHistory(histData);
+        setKcs(kcsData);
+      })
+      .catch(() => {
+        setHistory([]);
+        setKcs([]);
+      })
       .finally(() => setLoadingHistory(false));
   }, [courseId, concept.concept_id]);
 
@@ -73,7 +82,7 @@ export function ConceptPanel({ courseId, concept, allConcepts, onClose }: Props)
     allConcepts.find((c) => c.concept_id === id)?.status ?? "unknown";
 
   return (
-    <aside className="w-80 shrink-0 bg-surface-container-lowest rounded-xl border border-outline-variant/20 flex flex-col self-start sticky top-24 max-h-[calc(100vh-120px)] overflow-y-auto shadow-sm">
+    <aside className="w-full bg-surface-container-lowest rounded-xl border border-outline-variant/20 flex flex-col shadow-sm overflow-y-auto max-h-[50vh]">
 
       {/* ── Node Header ─────────────────────────────────────────── */}
       <div className="p-6 space-y-4">
@@ -217,6 +226,27 @@ export function ConceptPanel({ courseId, concept, allConcepts, onClose }: Props)
                   className="text-[11px] leading-relaxed text-on-surface-variant italic border-l-2 border-secondary/25 pl-3"
                 >
                   "{m}"
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* What you've learned */}
+        {kcs.length > 0 && (
+          <div className="space-y-2.5">
+            <span className="text-[10px] uppercase font-bold tracking-[0.15em] text-on-surface-variant/40">
+              What you&apos;ve learned
+            </span>
+            <ul className="space-y-2">
+              {kcs.map((kc) => (
+                <li key={kc.id} className="flex flex-col gap-0.5">
+                  <span className="text-[11px] leading-relaxed text-on-surface italic border-l-2 border-secondary/40 pl-3">
+                    &ldquo;{kc.component_text}&rdquo;
+                  </span>
+                  <span className="text-[9px] text-on-surface-variant/40 pl-3">
+                    {new Date(kc.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </span>
                 </li>
               ))}
             </ul>

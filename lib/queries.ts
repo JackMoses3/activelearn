@@ -150,6 +150,33 @@ export async function getConceptHistory(
   }));
 }
 
+export interface KnowledgeComponent {
+  id: number;
+  concept_id: string;
+  component_text: string;
+  session_id: string;
+  created_at: string;
+}
+
+export async function getKnowledgeComponents(
+  courseId: string,
+  conceptId: string
+): Promise<KnowledgeComponent[]> {
+  const db = getDb();
+  const result = await db.execute({
+    sql: "SELECT id, concept_id, component_text, session_id, created_at FROM knowledge_components WHERE course_id = ? AND concept_id = ? ORDER BY created_at ASC",
+    args: [courseId, conceptId],
+  });
+
+  return result.rows.map((r) => ({
+    id: r.id as number,
+    concept_id: r.concept_id as string,
+    component_text: r.component_text as string,
+    session_id: r.session_id as string,
+    created_at: r.created_at as string,
+  }));
+}
+
 export async function getSessionsForCourse(courseId: string): Promise<Session[]> {
   const db = getDb();
   const result = await db.execute({

@@ -42,8 +42,8 @@ export function CourseDetailClient({ course, initialConcepts, initialSessions }:
         </TabsList>
 
         <TabsContent value="map" className="mt-4">
-          <div className="flex gap-4 items-start">
-            <div className="flex-1 min-w-0">
+          <div className="flex flex-col gap-4">
+            <div className="w-full h-[50vh] min-h-100">
               <ConceptMap
                 concepts={concepts}
                 selectedConceptId={selectedConceptId}

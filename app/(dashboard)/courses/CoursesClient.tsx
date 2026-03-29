@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Trash2 } from "lucide-react";
 import { CourseStats, Session } from "@/lib/queries";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -50,6 +51,23 @@ function MasteryBar({ mastered, partial, seen, total }: { mastered: number; part
 export function CoursesClient({ initialCourses, initialSessions }: Props) {
   const [courses, setCourses] = useState(initialCourses);
   const [sessions, setSessions] = useState(initialSessions);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleDelete(courseId: string, courseName: string) {
+    if (!confirm(`Delete "${courseName}" and all its data? This cannot be undone.`)) return;
+    setDeletingId(courseId);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/dashboard/courses/${courseId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      setCourses((prev) => prev.filter((c) => c.id !== courseId));
+    } catch {
+      setDeleteError(`Failed to delete "${courseName}". Please try again.`);
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -85,16 +103,27 @@ export function CoursesClient({ initialCourses, initialSessions }: Props) {
       ) : (
         <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {courses.map((course) => (
-            <Link
+            <div
               key={course.id}
-              href={`/courses/${course.id}`}
-              className="bg-surface-container-lowest rounded-lg p-6 flex flex-col gap-4 shadow-sm hover:ring-1 hover:ring-outline-variant transition-all block"
+              className="bg-surface-container-lowest rounded-lg p-6 flex flex-col gap-4 shadow-sm hover:ring-1 hover:ring-outline-variant transition-all"
             >
-              <div>
-                <h3 className="font-bold text-lg text-primary leading-tight">{course.name}</h3>
-                <p className="text-xs text-on-surface-variant font-medium mt-0.5">
-                  {course.total} concepts · {course.session_count} sessions
-                </p>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <Link href={`/courses/${course.id}`} className="hover:underline">
+                    <h3 className="font-bold text-lg text-primary leading-tight">{course.name}</h3>
+                  </Link>
+                  <p className="text-xs text-on-surface-variant font-medium mt-0.5">
+                    {course.total} concepts · {course.session_count} sessions
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleDelete(course.id, course.name)}
+                  disabled={deletingId === course.id}
+                  className="shrink-0 p-1.5 text-on-surface-variant/30 hover:text-error hover:bg-error/8 rounded transition-colors disabled:opacity-40"
+                  aria-label={`Delete ${course.name}`}
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
 
               <MasteryBar
@@ -132,9 +161,15 @@ export function CoursesClient({ initialCourses, initialSessions }: Props) {
                   </span>
                 </div>
               </div>
-            </Link>
+            </div>
           ))}
         </section>
+      )}
+
+      {deleteError && (
+        <p className="text-sm text-error bg-error/8 border border-error/20 rounded-lg px-4 py-2">
+          {deleteError}
+        </p>
       )}
 
       {/* Recent Sessions */}
