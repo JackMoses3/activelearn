@@ -136,16 +136,9 @@ function ConceptMapBackground() {
   );
 }
 
-// ── MCP config snippet ──────────────────────────────────────────────────────
+// ── Connector URL ──────────────────────────────────────────────────────────
 
-const MCP_CONFIG = `{
-  "mcpServers": {
-    "activelearn": {
-      "type": "http",
-      "url": "https://your-app.vercel.app/api/mcp"
-    }
-  }
-}`;
+const CONNECTOR_URL = "https://activelearn.vercel.app/api/mcp";
 
 // ── Page ────────────────────────────────────────────────────────────────────
 
@@ -318,22 +311,23 @@ export default async function LandingPage() {
             >
               01
             </span>
-            <h3 className="text-base font-bold text-primary">Install the MCP server</h3>
+            <h3 className="text-base font-bold text-primary">Add the ActiveLearn connector</h3>
             <p className="text-sm text-on-surface-variant leading-relaxed">
-              Deploy this app and add the MCP server to your Claude Desktop or Claude.ai project config.
+              In Claude.ai, go to <strong>Customize → Connectors</strong>, click <strong>+</strong>,
+              and add a Custom connector named <strong>ActiveLearn</strong>.
             </p>
             <div
-              className="rounded-md p-4 mt-2 text-[11px] leading-relaxed overflow-x-auto"
+              className="rounded-md p-4 mt-2 text-[11px] leading-relaxed overflow-x-auto flex flex-col gap-2"
               style={{ background: "#2b2220", fontFamily: "'Geist Mono', monospace" }}
             >
-              {MCP_CONFIG.split("\n").map((line, i) => {
-                const isUrl = line.includes("your-app.vercel.app");
-                return (
-                  <div key={i} style={{ color: isUrl ? "#00ff94" : "#d3c3c0" }}>
-                    {line}
-                  </div>
-                );
-              })}
+              <div style={{ color: "#d3c3c0" }}>
+                <span style={{ color: "#807572" }}>Name&nbsp;&nbsp;</span>
+                <span style={{ color: "#ffffff" }}>ActiveLearn</span>
+              </div>
+              <div style={{ color: "#d3c3c0" }}>
+                <span style={{ color: "#807572" }}>URL&nbsp;&nbsp;&nbsp;</span>
+                <span style={{ color: "#00ff94" }}>{CONNECTOR_URL}</span>
+              </div>
             </div>
           </div>
 
