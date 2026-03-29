@@ -62,7 +62,10 @@ export function stateJsonToRows(
   courseName: string,
   stateJson: StateJson
 ): { concepts: ConceptRow[]; history: HistoryRow[] } {
-  const courseData = stateJson[courseName];
+  // Try exact course name first, then fall back to first key.
+  // The AI sometimes keys state_json by course_id ("computer-networking") instead of
+  // course name ("Computer Networking"), so we can't rely on an exact match.
+  const courseData = stateJson[courseName] ?? Object.values(stateJson)[0];
   if (!courseData?.concepts) return { concepts: [], history: [] };
 
   const concepts: ConceptRow[] = [];

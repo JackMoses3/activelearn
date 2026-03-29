@@ -4,6 +4,8 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: "Inter", sans-serif;
+  --font-display: "Fraunces", serif;
+  --font-mono: "Geist Mono", monospace;
 
   /* Design tokens from UI reference */
   --color-primary: #2b2220;

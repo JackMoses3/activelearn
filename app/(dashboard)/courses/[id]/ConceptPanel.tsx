@@ -82,7 +82,7 @@ export function ConceptPanel({ courseId, concept, allConcepts, onClose }: Props)
     allConcepts.find((c) => c.concept_id === id)?.status ?? "unknown";
 
   return (
-    <aside className="w-full bg-surface-container-lowest rounded-xl border border-outline-variant/20 flex flex-col shadow-sm overflow-y-auto max-h-[50vh]">
+    <aside className="w-full bg-surface-container-lowest rounded-xl border border-outline-variant/20 flex flex-col shadow-sm h-full">
 
       {/* ── Node Header ─────────────────────────────────────────── */}
       <div className="p-6 space-y-4">

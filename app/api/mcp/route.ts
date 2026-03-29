@@ -124,11 +124,23 @@ function buildMcpServer(): McpServer {
           c.review_count === 0 || c.mastery_score < 0.4 ? "i-do" : "diagnostic";
       }
 
+      // Load existing knowledge components grouped by concept_id
+      const kcRows = await db.execute({
+        sql: "SELECT concept_id, component_text FROM knowledge_components WHERE course_id = ? ORDER BY created_at ASC",
+        args: [courseId],
+      });
+      const knowledge_components: Record<string, string[]> = {};
+      for (const r of kcRows.rows) {
+        const cid = r.concept_id as string;
+        if (!knowledge_components[cid]) knowledge_components[cid] = [];
+        knowledge_components[cid].push(r.component_text as string);
+      }
+
       return {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify({ session_id: sessionId, course_id: courseId, state_json: stateJson, routing }),
+            text: JSON.stringify({ session_id: sessionId, course_id: courseId, state_json: stateJson, routing, knowledge_components }),
           },
         ],
       };
@@ -329,6 +341,7 @@ function buildMcpServer(): McpServer {
           COUNT(cm.concept_id) as total,
           SUM(CASE WHEN cm.status='mastered' THEN 1 ELSE 0 END) as mastered,
           SUM(CASE WHEN cm.status='partial' THEN 1 ELSE 0 END) as partial,
+          SUM(CASE WHEN cm.status='seen' THEN 1 ELSE 0 END) as seen,
           SUM(CASE WHEN cm.status='unknown' THEN 1 ELSE 0 END) as unknown,
           SUM(CASE WHEN cm.next_review <= date('now') THEN 1 ELSE 0 END) as due_today
         FROM courses c
@@ -344,6 +357,7 @@ function buildMcpServer(): McpServer {
         total: r.total ?? 0,
         mastered: r.mastered ?? 0,
         partial: r.partial ?? 0,
+        seen: r.seen ?? 0,
         unknown: r.unknown ?? 0,
         due_today: r.due_today ?? 0,
         aggregate_mastery:
@@ -436,6 +450,57 @@ function buildMcpServer(): McpServer {
       await db.batch(updates);
 
       return { content: [{ type: "text" as const, text: JSON.stringify({ ok: true }) }] };
+    }
+  );
+
+  // ── update_concept_status ─────────────────────────────────────────────────
+  server.tool(
+    "update_concept_status",
+    "Update mastery status for a single concept immediately after teaching or assessing it. Lighter than save_state — no full state_json needed. Call after each concept is scored. Increments review_count and sets last_review to today.",
+    {
+      course_id: z.string(),
+      concept_id: z.string(),
+      session_id: z.string(),
+      status: z.enum(["seen", "partial", "mastered"]).describe("Current mastery tier"),
+      mastery_score: z.number().min(0).max(1).optional().describe(
+        "0.0–1.0 score. Defaults if omitted: seen=0.20, partial=0.60, mastered=0.85"
+      ),
+    },
+    async ({ course_id, concept_id, session_id, status, mastery_score }) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const score =
+        mastery_score ??
+        (status === "mastered" ? 0.85 : status === "partial" ? 0.60 : 0.20);
+
+      try {
+        await db.batch([
+          {
+            sql: `INSERT INTO concept_mastery (course_id, concept_id, mastery_score, status, last_review, review_count)
+                  VALUES (?, ?, ?, ?, ?, 1)
+                  ON CONFLICT (course_id, concept_id) DO UPDATE SET
+                    mastery_score = excluded.mastery_score,
+                    status = excluded.status,
+                    last_review = excluded.last_review,
+                    review_count = review_count + 1`,
+            args: [course_id, concept_id, score, status, today],
+          },
+          {
+            sql: "INSERT INTO mastery_history (course_id, concept_id, date, session_score, rating) VALUES (?, ?, ?, ?, ?)",
+            args: [course_id, concept_id, today, score, status],
+          },
+          {
+            sql: "INSERT OR IGNORE INTO session_concepts (session_id, concept_id) VALUES (?, ?)",
+            args: [session_id, concept_id],
+          },
+        ]);
+
+        return { content: [{ type: "text" as const, text: JSON.stringify({ ok: true }) }] };
+      } catch {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ ok: false }) }],
+          isError: true,
+        };
+      }
     }
   );
 

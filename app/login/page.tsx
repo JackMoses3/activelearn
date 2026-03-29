@@ -1,15 +1,29 @@
 import { signIn } from "@/auth";
+import Link from "next/link";
 
 export default function LoginPage() {
   return (
     <div className="min-h-screen bg-surface flex items-center justify-center">
-      <div className="bg-surface-container-lowest rounded-lg border border-outline-variant p-10 flex flex-col items-center gap-6 w-80">
-        <div className="flex flex-col items-center gap-1 text-center">
-          <span className="uppercase tracking-[0.1em] text-[10px] font-semibold text-on-surface-variant">
-            ActiveLearn
+      <div className="bg-surface-container-lowest rounded-lg border border-outline-variant/20 p-10 flex flex-col items-center gap-6 w-80 shadow-sm">
+        <div className="flex flex-col items-center gap-2 text-center">
+          <span
+            className="text-[10px] font-semibold uppercase tracking-[0.14em] text-secondary"
+            style={{ fontFamily: "'Geist Mono', monospace" }}
+          >
+            MCP-Connected Learning
           </span>
-          <h1 className="text-2xl font-bold text-primary">Learning Hub</h1>
-          <p className="text-sm text-on-surface-variant mt-1">Sign in to view your courses and progress.</p>
+          <h1
+            className="text-[28px] font-bold text-primary leading-tight tracking-tight"
+            style={{ fontFamily: "'Fraunces', serif" }}
+          >
+            Sign in to your<br />
+            <em className="font-light not-italic" style={{ fontStyle: "italic" }}>
+              learning graph.
+            </em>
+          </h1>
+          <p className="text-sm text-on-surface-variant mt-1">
+            Your concept map and session history are waiting.
+          </p>
         </div>
 
         <form
@@ -29,6 +43,14 @@ export default function LoginPage() {
             Sign in with GitHub
           </button>
         </form>
+
+        <Link
+          href="/"
+          className="text-[11px] text-on-surface-variant/60 hover:text-on-surface-variant transition-colors"
+          style={{ fontFamily: "'Geist Mono', monospace" }}
+        >
+          ← Back to activelearn
+        </Link>
       </div>
     </div>
   );

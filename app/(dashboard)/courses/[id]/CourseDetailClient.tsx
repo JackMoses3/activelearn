@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConceptMap } from "./ConceptMap";
 import { ConceptPanel } from "./ConceptPanel";
@@ -15,18 +15,35 @@ interface Props {
 
 export function CourseDetailClient({ course, initialConcepts, initialSessions }: Props) {
   const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
-  const concepts = initialConcepts;
+  const [concepts, setConcepts] = useState(initialConcepts);
   const sessions = initialSessions;
+
+  // Poll for updated concept mastery every 30s — picks up incremental saves from Claude
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/dashboard/courses/${course.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setConcepts(data.concepts);
+        }
+      } catch {
+        // silent — stale data is fine
+      }
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [course.id]);
 
   const selectedConcept = selectedConceptId
     ? concepts.find((c) => c.concept_id === selectedConceptId) ?? null
     : null;
 
+  // h-[calc(100vh-144px)]: 100vh minus 64px sticky header minus 80px padding (p-10 top+bottom)
   return (
-    <div className="flex flex-col gap-6 max-w-full">
+    <div className="flex flex-col h-[calc(100vh-144px)] overflow-hidden">
       {/* Course header */}
-      <div className="flex flex-col gap-1">
-        <span className="uppercase tracking-[0.1em] text-[10px] font-semibold text-on-surface-variant">
+      <div className="flex flex-col gap-1 shrink-0 pb-4">
+        <span className="uppercase tracking-widest text-[10px] font-semibold text-on-surface-variant">
           Course
         </span>
         <h2 className="text-3xl font-bold tracking-tight text-primary">{course.name}</h2>
@@ -35,15 +52,15 @@ export function CourseDetailClient({ course, initialConcepts, initialSessions }:
         </p>
       </div>
 
-      <Tabs defaultValue="map">
-        <TabsList className="bg-surface-container-low">
+      <Tabs defaultValue="map" className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <TabsList className="bg-surface-container-low shrink-0">
           <TabsTrigger value="map">Concept Map</TabsTrigger>
           <TabsTrigger value="sessions">Sessions</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="map" className="mt-4">
-          <div className="flex flex-col gap-4">
-            <div className="w-full h-[50vh] min-h-100">
+        <TabsContent value="map" className="flex-1 min-h-0 overflow-hidden mt-4">
+          <div className="flex flex-row gap-4 h-full">
+            <div className="flex-1 min-w-0">
               <ConceptMap
                 concepts={concepts}
                 selectedConceptId={selectedConceptId}
@@ -51,17 +68,19 @@ export function CourseDetailClient({ course, initialConcepts, initialSessions }:
               />
             </div>
             {selectedConcept && (
-              <ConceptPanel
-                courseId={course.id}
-                concept={selectedConcept}
-                allConcepts={concepts}
-                onClose={() => setSelectedConceptId(null)}
-              />
+              <div className="w-96 shrink-0 overflow-y-auto border-l border-outline-variant pl-4">
+                <ConceptPanel
+                  courseId={course.id}
+                  concept={selectedConcept}
+                  allConcepts={concepts}
+                  onClose={() => setSelectedConceptId(null)}
+                />
+              </div>
             )}
           </div>
         </TabsContent>
 
-        <TabsContent value="sessions" className="mt-4">
+        <TabsContent value="sessions" className="flex-1 min-h-0 overflow-y-auto mt-4">
           <SessionsTab sessions={sessions} />
         </TabsContent>
       </Tabs>

@@ -86,7 +86,7 @@ export function CoursesClient({ initialCourses, initialSessions }: Props) {
   }, []);
 
   return (
-    <div className="flex flex-col gap-12 max-w-7xl">
+    <div className="flex flex-col gap-12">
       {/* Header */}
       <section className="flex flex-col gap-1">
         <span className="uppercase tracking-[0.1em] text-[10px] font-semibold text-on-surface-variant">
@@ -97,11 +97,11 @@ export function CoursesClient({ initialCourses, initialSessions }: Props) {
 
       {/* Course Grid */}
       {courses.length === 0 ? (
-        <div className="text-on-surface-variant text-sm py-12 text-center border border-dashed border-outline-variant rounded-lg">
+        <div className="max-w-7xl text-on-surface-variant text-sm py-12 text-center border border-dashed border-outline-variant rounded-lg">
           No courses yet. Start a learning session in Claude to create your first course.
         </div>
       ) : (
-        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <section className="max-w-7xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {courses.map((course) => (
             <div
               key={course.id}
@@ -151,14 +151,6 @@ export function CoursesClient({ initialCourses, initialSessions }: Props) {
                     Unseen
                   </span>
                   <span className="text-sm font-semibold">{course.unknown}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-error/80">
-                    Due Today
-                  </span>
-                  <span className={`text-sm font-bold ${course.due_today > 0 ? "text-error" : ""}`}>
-                    {course.due_today}
-                  </span>
                 </div>
               </div>
             </div>
