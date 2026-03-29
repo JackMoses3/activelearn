@@ -215,10 +215,15 @@ export default async function LandingPage() {
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <section className="relative min-h-[88vh] flex items-center overflow-hidden">
 
-        {/* Concept map background */}
-        <div className="absolute inset-0 opacity-[0.14]">
+        {/* Concept map background — right portion only */}
+        <div className="absolute right-0 inset-y-0 w-[68%] opacity-[0.18]">
           <ConceptMapBackground />
         </div>
+        {/* Gradient fade so left text area is fully readable */}
+        <div
+          className="absolute inset-0 z-1 pointer-events-none"
+          style={{ background: "linear-gradient(90deg, #fbf9f1 42%, rgba(251,249,241,0.88) 62%, transparent 82%)" }}
+        />
 
         {/* Hero content */}
         <div className="relative z-10 px-16 py-24 max-w-3xl">

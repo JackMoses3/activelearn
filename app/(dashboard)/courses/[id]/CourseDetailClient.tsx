@@ -38,9 +38,8 @@ export function CourseDetailClient({ course, initialConcepts, initialSessions }:
     ? concepts.find((c) => c.concept_id === selectedConceptId) ?? null
     : null;
 
-  // h-[calc(100vh-144px)]: 100vh minus 64px sticky header minus 80px padding (p-10 top+bottom)
   return (
-    <div className="flex flex-col h-[calc(100vh-144px)] overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden pt-6 px-8">
       {/* Course header */}
       <div className="flex flex-col gap-1 shrink-0 pb-4">
         <span className="uppercase tracking-widest text-[10px] font-semibold text-on-surface-variant">
@@ -58,7 +57,7 @@ export function CourseDetailClient({ course, initialConcepts, initialSessions }:
           <TabsTrigger value="sessions">Sessions</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="map" className="flex-1 min-h-0 overflow-hidden mt-4">
+        <TabsContent value="map" className="flex-1 min-h-0 overflow-hidden mt-4 pb-6">
           <div className="flex flex-row gap-4 h-full">
             <div className="flex-1 min-w-0">
               <ConceptMap
@@ -68,7 +67,7 @@ export function CourseDetailClient({ course, initialConcepts, initialSessions }:
               />
             </div>
             {selectedConcept && (
-              <div className="w-96 shrink-0 overflow-y-auto border-l border-outline-variant pl-4">
+              <div className="w-96 shrink-0 h-full overflow-y-auto border-l border-outline-variant pl-4">
                 <ConceptPanel
                   courseId={course.id}
                   concept={selectedConcept}

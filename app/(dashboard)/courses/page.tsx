@@ -6,5 +6,9 @@ export const dynamic = "force-dynamic";
 export default async function CoursesPage() {
   const [courses, sessions] = await Promise.all([getCourses(), getRecentSessions(10)]);
 
-  return <CoursesClient initialCourses={courses} initialSessions={sessions} />;
+  return (
+    <div className="p-10">
+      <CoursesClient initialCourses={courses} initialSessions={sessions} />
+    </div>
+  );
 }

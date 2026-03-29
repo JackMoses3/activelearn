@@ -24,171 +24,114 @@ function toTitleCase(str: string): string {
   return str.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// ─── Mastery status → visual style ──────────────────────────────────────────
-
-const STATUS_STYLES: Record<
-  string,
-  {
-    bg: string;
-    border: string;
-    text: string;
-    mutedText: string;
-    ringTrack: string;
-    ringFill: string | null;
-    boxShadow: string;
-    selectedShadow: string;
-  }
-> = {
-  mastered: {
-    bg: "linear-gradient(135deg, #2b2220 0%, #3a2d2a 100%)",
-    border: "transparent",
-    text: "#ffffff",
-    mutedText: "rgba(255,255,255,0.5)",
-    ringTrack: "rgba(255,255,255,0.15)",
-    ringFill: "#d3c3c0",
-    boxShadow: "0 0 14px rgba(43,34,32,0.28), 0 2px 8px rgba(43,34,32,0.18)",
-    selectedShadow: "0 0 0 2px #5b4ac8, 0 0 14px rgba(43,34,32,0.28)",
-  },
-  partial: {
-    bg: "#ffffff",
-    border: "rgba(209,195,193,0.5)",
-    text: "#2b2220",
-    mutedText: "#807572",
-    ringTrack: "rgba(91,74,200,0.12)",
-    ringFill: "#5b4ac8",
-    boxShadow: "0 1px 3px rgba(43,34,32,0.08), 0 1px 2px rgba(43,34,32,0.05)",
-    selectedShadow: "0 0 0 2px #5b4ac8, 0 0 0 5px rgba(91,74,200,0.15)",
-  },
-  seen: {
-    bg: "#f6f4ec",
-    border: "rgba(209,195,193,0.5)",
-    text: "#4e4543",
-    mutedText: "#a09896",
-    ringTrack: "rgba(128,117,114,0.2)",
-    ringFill: "#807572",
-    boxShadow: "0 1px 3px rgba(43,34,32,0.06)",
-    selectedShadow: "0 0 0 2px #5b4ac8, 0 0 0 5px rgba(91,74,200,0.15)",
-  },
-  unknown: {
-    bg: "#fafaf8",
-    border: "rgba(209,195,193,0.4)",
-    text: "#b0a8a6",
-    mutedText: "#c8c0be",
-    ringTrack: "rgba(209,195,193,0.5)",
-    ringFill: null,
-    boxShadow: "0 1px 2px rgba(43,34,32,0.04)",
-    selectedShadow: "0 0 0 2px #5b4ac8",
-  },
-};
-
-function getStyle(status: string) {
-  return STATUS_STYLES[status] ?? STATUS_STYLES.unknown;
-}
-
-// ─── Mastery ring SVG ─────────────────────────────────────────────────────────
-
-interface MasteryRingProps {
-  score: number;
-  status: string;
-  ringTrack: string;
-  ringFill: string | null;
-}
-
-function MasteryRing({ score, status, ringTrack, ringFill }: MasteryRingProps) {
-  const R = 9;
-  const C = 2 * Math.PI * R; // ≈ 56.55
-  const progress = C * Math.min(score, 1);
-  const remaining = C - progress;
-
-  return (
-    <svg
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      className="shrink-0"
-      aria-hidden="true"
-    >
-      {/* Track */}
-      <circle
-        cx="12"
-        cy="12"
-        r={R}
-        fill="none"
-        stroke={ringTrack}
-        strokeWidth="2"
-        strokeDasharray={status === "unknown" ? "2 3.2" : undefined}
-      />
-      {/* Progress arc */}
-      {ringFill && score > 0 && (
-        <circle
-          cx="12"
-          cy="12"
-          r={R}
-          fill="none"
-          stroke={ringFill}
-          strokeWidth="2"
-          strokeDasharray={`${progress} ${remaining}`}
-          strokeLinecap="round"
-          transform="rotate(-90 12 12)"
-        />
-      )}
-      {/* Center completion dot — only on mastered */}
-      {status === "mastered" && ringFill && (
-        <circle cx="12" cy="12" r="3" fill={ringFill} />
-      )}
-    </svg>
-  );
-}
-
 // ─── Custom node component ───────────────────────────────────────────────────
 
 interface ConceptNodeData {
   label: string;
   status: string;
   mastery_score: number;
+  review_count: number;
   selected: boolean;
   [key: string]: unknown;
 }
 
 function ConceptNode({ data }: NodeProps<Node<ConceptNodeData>>) {
-  const style = getStyle(data.status);
-  const masteryLabel =
-    data.status === "unknown"
-      ? "not started"
-      : `${Math.round(data.mastery_score * 100)}%`;
+  const { status, mastery_score, review_count, selected } = data;
+
+  const isMastered = status === "mastered";
+  const isPartial = status === "partial";
+  const isLive = status === "live";
+  const isUnknown = status === "unknown";
+
+  const bg = isMastered ? "#2b2220" : isUnknown || status === "seen" ? "#f6f4ec" : "#ffffff";
+
+  const borderColor = selected
+    ? "#5b4ac8"
+    : isMastered
+    ? "transparent"
+    : isPartial
+    ? "#5b4ac8"
+    : isLive
+    ? "rgba(0,255,148,0.6)"
+    : "rgba(128,117,114,0.4)";
+
+  const borderStyle = isUnknown ? "dashed" : "solid";
+
+  const textColor = isMastered ? "#ffffff" : "#2b2220";
+
+  const mutedColor = isMastered
+    ? "rgba(255,255,255,0.45)"
+    : isPartial
+    ? "#5b4ac8"
+    : isLive
+    ? "#00b368"
+    : "#807572";
+
+  const boxShadow = selected
+    ? "0 0 0 3px rgba(91,74,200,0.28), 0 2px 8px rgba(43,34,32,0.1)"
+    : isMastered
+    ? "0 2px 10px rgba(43,34,32,0.22), 0 1px 3px rgba(43,34,32,0.16)"
+    : "0 1px 3px rgba(43,34,32,0.07)";
+
+  const scoreLabel =
+    isUnknown || mastery_score === 0
+      ? "unseen"
+      : `${mastery_score.toFixed(2)} · ${review_count}×`;
 
   return (
     <>
       <Handle type="target" position={Position.Top} style={{ visibility: "hidden" }} />
       <div
         style={{
-          background: style.bg,
-          border: `1px solid ${data.selected ? "#5b4ac8" : style.border}`,
-          boxShadow: data.selected ? style.selectedShadow : style.boxShadow,
+          background: bg,
+          border: `1.5px ${borderStyle} ${borderColor}`,
+          boxShadow,
+          borderRadius: "6px",
+          padding: "9px 13px",
+          minWidth: "110px",
+          position: "relative",
+          cursor: "pointer",
+          userSelect: "none",
+          transition: "box-shadow 0.15s ease, transform 0.15s ease",
         }}
-        className="relative rounded-xl overflow-hidden cursor-pointer select-none transition-all duration-200 hover:scale-[1.04] hover:-translate-y-px"
+        className="hover:scale-[1.04] hover:-translate-y-px"
       >
-        <div className="px-3 py-2.5 flex items-center gap-2.5 min-w-37.5 max-w-48.75">
-          <MasteryRing
-            score={data.mastery_score}
-            status={data.status}
-            ringTrack={style.ringTrack}
-            ringFill={style.ringFill}
+        {isLive && (
+          <div
+            style={{
+              position: "absolute",
+              top: 8,
+              right: 9,
+              width: 5,
+              height: 5,
+              borderRadius: "50%",
+              background: "#00ff94",
+            }}
           />
-          <div className="flex-1 min-w-0">
-            <div
-              className="text-[11px] font-bold leading-tight truncate"
-              style={{ color: style.text }}
-            >
-              {data.label}
-            </div>
-            <div
-              className="text-[9px] mt-0.5 font-medium uppercase tracking-wider"
-              style={{ color: style.mutedText }}
-            >
-              {masteryLabel}
-            </div>
-          </div>
+        )}
+        <div
+          style={{
+            fontFamily: "'Geist Mono', monospace",
+            fontSize: 9,
+            fontWeight: 700,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            color: textColor,
+            lineHeight: 1.2,
+            paddingRight: isLive ? 12 : 0,
+          }}
+        >
+          {data.label}
+        </div>
+        <div
+          style={{
+            fontFamily: "'Geist Mono', monospace",
+            fontSize: 8,
+            color: mutedColor,
+            marginTop: 3,
+          }}
+        >
+          {scoreLabel}
         </div>
       </div>
       <Handle type="source" position={Position.Bottom} style={{ visibility: "hidden" }} />
@@ -200,13 +143,13 @@ const nodeTypes = { concept: ConceptNode };
 
 // ─── dagre layout ─────────────────────────────────────────────────────────────
 
-const NODE_WIDTH = 200;
-const NODE_HEIGHT = 62;
+const NODE_WIDTH = 130;
+const NODE_HEIGHT = 46;
 
 function buildGraph(concepts: ConceptMastery[]): { nodes: Node[]; edges: Edge[] } {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: "TB", ranksep: 72, nodesep: 36 });
+  g.setGraph({ rankdir: "TB", ranksep: 64, nodesep: 28 });
 
   const conceptMap = new Map(concepts.map((c) => [c.concept_id, c]));
 
@@ -232,18 +175,14 @@ function buildGraph(concepts: ConceptMastery[]): { nodes: Node[]; edges: Edge[] 
           source: prereq,
           target: c.concept_id,
           style: {
-            stroke: sourceMastered
-              ? "rgba(91,74,200,0.55)"
-              : "rgba(209,195,193,0.8)",
-            strokeWidth: sourceMastered ? 2 : 1.5,
+            stroke: sourceMastered ? "rgba(91,74,200,0.5)" : "rgba(209,195,193,0.7)",
+            strokeWidth: sourceMastered ? 1.5 : 1,
           },
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            color: sourceMastered
-              ? "rgba(91,74,200,0.55)"
-              : "rgba(209,195,193,0.8)",
-            width: 10,
-            height: 10,
+            color: sourceMastered ? "rgba(91,74,200,0.5)" : "rgba(209,195,193,0.7)",
+            width: 9,
+            height: 9,
           },
           animated: false,
         });
@@ -263,6 +202,7 @@ function buildGraph(concepts: ConceptMastery[]): { nodes: Node[]; edges: Edge[] 
         label: toTitleCase(c.concept_id.replace(/_/g, " ")),
         status: c.status,
         mastery_score: c.mastery_score,
+        review_count: c.review_count ?? 0,
         selected: false,
       },
     };
@@ -288,7 +228,6 @@ export function ConceptMap({ concepts, selectedConceptId, onSelectConcept }: Pro
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutEdges);
 
-  // Sync when concepts change
   useEffect(() => {
     setNodes(layoutNodes);
   }, [layoutNodes, setNodes]);
@@ -297,7 +236,6 @@ export function ConceptMap({ concepts, selectedConceptId, onSelectConcept }: Pro
     setEdges(layoutEdges);
   }, [layoutEdges, setEdges]);
 
-  // Update selected state without re-running dagre
   useEffect(() => {
     setNodes((nds) =>
       nds.map((n) => ({
@@ -316,25 +254,17 @@ export function ConceptMap({ concepts, selectedConceptId, onSelectConcept }: Pro
 
   if (concepts.length === 0) {
     return (
-      <div className="h-full bg-surface-container-lowest rounded-xl border border-outline-variant/30 flex flex-col items-center justify-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-surface-container-low flex items-center justify-center">
-          <span className="material-symbols-outlined text-on-surface-variant/40 text-xl">
-            account_tree
-          </span>
-        </div>
+      <div className="h-full bg-surface-container-lowest rounded-xl flex flex-col items-center justify-center gap-3"
+        style={{ border: "1px solid rgba(209,195,193,0.25)" }}>
+        <span className="material-symbols-outlined text-on-surface-variant/30 text-3xl">account_tree</span>
         <div className="text-center">
-          <p className="text-sm font-semibold text-on-surface-variant">
-            No concepts mapped yet
-          </p>
-          <p className="text-xs text-on-surface-variant/50 mt-0.5">
-            Run{" "}
-            <code className="font-mono bg-surface-container px-1.5 py-0.5 rounded">
-              /map this
-            </code>{" "}
-            in Claude, then call{" "}
-            <code className="font-mono bg-surface-container px-1.5 py-0.5 rounded">
-              import_graph
-            </code>
+          <p className="text-sm font-semibold text-on-surface-variant/60">No concepts mapped yet</p>
+          <p className="text-xs text-on-surface-variant/40 mt-1">
+            Say{" "}
+            <span style={{ fontFamily: "'Geist Mono', monospace" }} className="bg-surface-container px-1.5 py-0.5 rounded text-[10px]">
+              map this
+            </span>{" "}
+            in Claude with your notes attached
           </p>
         </div>
       </div>
@@ -342,7 +272,8 @@ export function ConceptMap({ concepts, selectedConceptId, onSelectConcept }: Pro
   }
 
   return (
-    <div className="h-full bg-surface-container-lowest rounded-xl border border-outline-variant/20 overflow-hidden shadow-sm relative">
+    <div className="h-full rounded-xl overflow-hidden shadow-sm relative"
+      style={{ background: "#ffffff", border: "1px solid rgba(209,195,193,0.2)" }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -351,7 +282,7 @@ export function ConceptMap({ concepts, selectedConceptId, onSelectConcept }: Pro
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
         fitView
-        fitViewOptions={{ padding: 0.25 }}
+        fitViewOptions={{ padding: 0.28 }}
         minZoom={0.25}
         maxZoom={2}
         attributionPosition="bottom-right"
@@ -359,42 +290,43 @@ export function ConceptMap({ concepts, selectedConceptId, onSelectConcept }: Pro
       >
         <Background
           variant={BackgroundVariant.Dots}
-          gap={22}
+          gap={24}
           size={1}
           color="#d1c3c1"
-          style={{ opacity: 0.5 }}
+          style={{ opacity: 0.4 }}
         />
         <Controls
           showInteractive={false}
-          className="bg-surface-container-lowest! border-outline-variant/30! shadow-sm!"
+          className="bg-surface-container-lowest! border-outline-variant/20! shadow-sm!"
         />
       </ReactFlow>
 
       {/* Legend */}
-      <div className="absolute top-4 left-4 z-10 flex items-center gap-5 bg-surface-container-lowest/90 backdrop-blur-md px-4 py-2.5 rounded-lg border border-outline-variant/15 shadow-sm">
+      <div className="absolute top-3 left-3 z-10 flex items-center gap-4 px-3 py-2 rounded-md"
+        style={{ background: "rgba(255,255,255,0.92)", backdropFilter: "blur(8px)", border: "1px solid rgba(209,195,193,0.2)" }}>
         {(
           [
-            { status: "mastered", label: "Mastered", fill: "#2b2220" },
-            { status: "partial", label: "Partial", fill: "#5b4ac8" },
-            { status: "seen", label: "Seen", fill: "#807572" },
-            { status: "unknown", label: "Unknown", fill: null },
+            { label: "Mastered", bg: "#2b2220", border: "transparent", dash: false },
+            { label: "Partial", bg: "#ffffff", border: "#5b4ac8", dash: false },
+            { label: "Seen", bg: "#f6f4ec", border: "rgba(128,117,114,0.5)", dash: false },
+            { label: "Unknown", bg: "#f6f4ec", border: "rgba(128,117,114,0.35)", dash: true },
           ] as const
-        ).map(({ status, label, fill }) => (
-          <div key={status} className="flex items-center gap-1.5">
-            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-              <circle
-                cx="7" cy="7" r="5"
-                fill="none"
-                stroke={fill ?? "#d1c3c1"}
-                strokeWidth="1.5"
-                strokeDasharray={status === "unknown" ? "2 2" : undefined}
-                opacity={fill ? 1 : 0.6}
-              />
-              {status === "mastered" && (
-                <circle cx="7" cy="7" r="2" fill="#2b2220" />
-              )}
-            </svg>
-            <span className="text-[9px] uppercase font-semibold text-on-surface-variant tracking-wider">
+        ).map(({ label, bg, border, dash }) => (
+          <div key={label} className="flex items-center gap-1.5">
+            <div
+              style={{
+                width: 22,
+                height: 13,
+                borderRadius: 3,
+                background: bg,
+                border: `1.5px ${dash ? "dashed" : "solid"} ${border}`,
+                flexShrink: 0,
+              }}
+            />
+            <span
+              className="text-[9px] uppercase font-semibold text-on-surface-variant tracking-wider"
+              style={{ fontFamily: "'Geist Mono', monospace" }}
+            >
               {label}
             </span>
           </div>

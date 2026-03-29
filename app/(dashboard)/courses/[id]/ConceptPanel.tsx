@@ -82,7 +82,7 @@ export function ConceptPanel({ courseId, concept, allConcepts, onClose }: Props)
     allConcepts.find((c) => c.concept_id === id)?.status ?? "unknown";
 
   return (
-    <aside className="w-full bg-surface-container-lowest rounded-xl border border-outline-variant/20 flex flex-col shadow-sm h-full">
+    <aside className="w-full bg-surface-container-lowest rounded-xl border border-outline-variant/20 flex flex-col shadow-sm">
 
       {/* ── Node Header ─────────────────────────────────────────── */}
       <div className="p-6 space-y-4">
@@ -290,16 +290,6 @@ export function ConceptPanel({ courseId, concept, allConcepts, onClose }: Props)
         </div>
       </div>
 
-      {/* ── CTA ─────────────────────────────────────────────────── */}
-      <div className="mt-auto p-6 border-t border-outline-variant/15">
-        <button
-          className="w-full bg-surface-container-highest text-primary py-3 text-[10px] font-bold uppercase tracking-widest hover:bg-surface-dim transition-colors flex items-center justify-center gap-2 rounded-sm"
-          onClick={() => navigator.clipboard.writeText(toTitleCase(concept.concept_id.replace(/_/g, " ")))}
-        >
-          <span className="material-symbols-outlined text-sm leading-none">school</span>
-          Study This Node
-        </button>
-      </div>
     </aside>
   );
 }
