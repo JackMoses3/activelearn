@@ -52,7 +52,7 @@ export function CourseDetailClient({ course, initialConcepts, initialSessions }:
       </div>
 
       <Tabs defaultValue="map" className="flex flex-col flex-1 min-h-0 overflow-hidden">
-        <TabsList className="bg-surface-container-low shrink-0">
+        <TabsList className="bg-surface-container-low shrink-0 justify-start w-full">
           <TabsTrigger value="map">Concept Map</TabsTrigger>
           <TabsTrigger value="sessions">Sessions</TabsTrigger>
         </TabsList>

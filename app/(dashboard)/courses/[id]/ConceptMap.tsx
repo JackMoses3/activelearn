@@ -88,7 +88,7 @@ function ConceptNode({ data }: NodeProps<Node<ConceptNodeData>>) {
           boxShadow,
           borderRadius: "6px",
           padding: "9px 13px",
-          minWidth: "110px",
+          width: `${NODE_WIDTH}px`,
           position: "relative",
           cursor: "pointer",
           userSelect: "none",
@@ -143,13 +143,13 @@ const nodeTypes = { concept: ConceptNode };
 
 // ─── dagre layout ─────────────────────────────────────────────────────────────
 
-const NODE_WIDTH = 130;
-const NODE_HEIGHT = 46;
+const NODE_WIDTH = 160;
+const NODE_HEIGHT = 50;
 
 function buildGraph(concepts: ConceptMastery[]): { nodes: Node[]; edges: Edge[] } {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: "TB", ranksep: 64, nodesep: 28 });
+  g.setGraph({ rankdir: "TB", ranksep: 72, nodesep: 48 });
 
   const conceptMap = new Map(concepts.map((c) => [c.concept_id, c]));
 
