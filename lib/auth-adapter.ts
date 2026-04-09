@@ -14,10 +14,9 @@ function rowToUser(row: Record<string, unknown>): AdapterUser {
 }
 
 export function TursoAdapter(): Adapter {
-  const db = getDb();
-
   return {
     async createUser(user) {
+      const db = getDb();
       const id = crypto.randomUUID();
       await db.execute({
         sql: `INSERT INTO users (id, name, email, email_verified, image) VALUES (?, ?, ?, ?, ?)`,
@@ -33,6 +32,7 @@ export function TursoAdapter(): Adapter {
     },
 
     async getUser(id) {
+      const db = getDb();
       const result = await db.execute({
         sql: `SELECT * FROM users WHERE id = ?`,
         args: [id],
@@ -42,6 +42,7 @@ export function TursoAdapter(): Adapter {
     },
 
     async getUserByEmail(email) {
+      const db = getDb();
       const result = await db.execute({
         sql: `SELECT * FROM users WHERE email = ?`,
         args: [email],
@@ -51,6 +52,7 @@ export function TursoAdapter(): Adapter {
     },
 
     async getUserByAccount({ provider, providerAccountId }) {
+      const db = getDb();
       const result = await db.execute({
         sql: `SELECT u.* FROM users u
               JOIN accounts a ON u.id = a.user_id
@@ -62,6 +64,7 @@ export function TursoAdapter(): Adapter {
     },
 
     async updateUser(user) {
+      const db = getDb();
       const fields: string[] = [];
       const args: (string | null)[] = [];
       if (user.name !== undefined) {
@@ -95,6 +98,7 @@ export function TursoAdapter(): Adapter {
     },
 
     async linkAccount(account) {
+      const db = getDb();
       const id = crypto.randomUUID();
       await db.execute({
         sql: `INSERT INTO accounts (id, user_id, type, provider, provider_account_id, refresh_token, access_token, expires_at, token_type, scope, id_token)
