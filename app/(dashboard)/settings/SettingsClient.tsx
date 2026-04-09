@@ -1,12 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { regenerateToken, deleteAccount, signOutAction } from "./actions";
+import { deleteAccount, signOutAction } from "./actions";
 
 const MONO: React.CSSProperties = { fontFamily: "'Geist Mono', monospace" };
 const SERIF: React.CSSProperties = { fontFamily: "'Fraunces', serif" };
-
-const BASE = process.env.NEXT_PUBLIC_BASE_URL ?? "https://activelearn.vercel.app";
 
 interface Props {
   user: {
@@ -15,8 +13,6 @@ interface Props {
     email: string;
     image: string | null;
   };
-  hasToken: boolean;
-  tokenCreatedAt: string | null;
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -30,46 +26,14 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function SettingsClient({ user, hasToken, tokenCreatedAt }: Props) {
-  const [newToken, setNewToken] = useState<string | null>(null);
+export function SettingsClient({ user }: Props) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [copied, setCopied] = useState<"token" | "config" | null>(null);
   const [isPending, startTransition] = useTransition();
-
-  const mcpConfig = JSON.stringify(
-    {
-      mcpServers: {
-        activelearn: {
-          url: `${BASE}/api/mcp`,
-          headers: {
-            Authorization: `Bearer ${newToken ?? "YOUR_TOKEN_HERE"}`,
-          },
-        },
-      },
-    },
-    null,
-    2
-  );
-
-  async function handleRegenerate() {
-    startTransition(async () => {
-      const result = await regenerateToken();
-      if ("rawToken" in result) {
-        setNewToken(result.rawToken);
-      }
-    });
-  }
 
   async function handleDelete() {
     startTransition(async () => {
       await deleteAccount();
     });
-  }
-
-  function copyToClipboard(text: string, which: "token" | "config") {
-    navigator.clipboard.writeText(text);
-    setCopied(which);
-    setTimeout(() => setCopied(null), 2000);
   }
 
   return (
@@ -106,80 +70,6 @@ export function SettingsClient({ user, hasToken, tokenCreatedAt }: Props) {
             </p>
             <p className="text-[13px] text-on-surface-variant">{user.email}</p>
           </div>
-        </div>
-      </section>
-
-      {/* MCP Connection Section */}
-      <section className="bg-surface-container-lowest rounded-lg p-6" style={{ boxShadow: "0 2px 16px rgba(27,28,23,0.05)" }}>
-        <SectionLabel>MCP Connection</SectionLabel>
-
-        {/* Token status */}
-        <div className="mb-4">
-          {newToken ? (
-            <div className="space-y-2">
-              <p className="text-[13px] text-on-surface-variant">
-                New token generated. Copy it now, it will not be shown again.
-              </p>
-              <div className="flex items-center gap-2">
-                <code
-                  className="flex-1 text-[11px] bg-surface-container-high rounded px-3 py-2 text-primary break-all"
-                  style={MONO}
-                >
-                  {newToken}
-                </code>
-                <button
-                  onClick={() => copyToClipboard(newToken, "token")}
-                  className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.1em] text-secondary hover:opacity-80 transition-opacity px-3 py-2"
-                  style={MONO}
-                >
-                  {copied === "token" ? "Copied" : "Copy"}
-                </button>
-              </div>
-            </div>
-          ) : hasToken ? (
-            <p className="text-[13px] text-on-surface-variant">
-              Token active
-              {tokenCreatedAt && (
-                <span className="text-on-surface-variant/50">
-                  {" "}· created {new Date(tokenCreatedAt).toLocaleDateString()}
-                </span>
-              )}
-            </p>
-          ) : (
-            <p className="text-[13px] text-on-surface-variant">
-              No MCP token configured. Generate one to connect Claude.
-            </p>
-          )}
-        </div>
-
-        <button
-          onClick={handleRegenerate}
-          disabled={isPending}
-          className="bg-primary text-on-primary py-2 px-4 rounded-md text-[13px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
-        >
-          {hasToken && !newToken ? "Regenerate Token" : "Generate Token"}
-        </button>
-
-        {/* Config block */}
-        <div className="mt-6">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant/60" style={MONO}>
-              Claude Desktop Config
-            </span>
-            <button
-              onClick={() => copyToClipboard(mcpConfig, "config")}
-              className="text-[10px] font-semibold uppercase tracking-[0.1em] text-secondary hover:opacity-80 transition-opacity"
-              style={MONO}
-            >
-              {copied === "config" ? "Copied" : "Copy"}
-            </button>
-          </div>
-          <pre
-            className="text-[11px] bg-primary text-on-primary rounded-md px-4 py-3 overflow-x-auto"
-            style={MONO}
-          >
-            {mcpConfig}
-          </pre>
         </div>
       </section>
 

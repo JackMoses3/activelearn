@@ -28,6 +28,7 @@ export function AppTopNav() {
       <nav className="flex items-center">
         {[
           { href: "/courses", label: "Courses" },
+          { href: "/setup", label: "Setup" },
           { href: "/settings", label: "Settings" },
         ].map(({ href, label }) => {
           const active = href === "/courses"
