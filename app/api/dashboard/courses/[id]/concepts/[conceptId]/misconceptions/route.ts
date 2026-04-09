@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getKnowledgeComponents } from "@/lib/queries";
+import { getMisconceptions } from "@/lib/queries";
 
 interface Params {
   params: Promise<{ id: string; conceptId: string }>;
@@ -13,6 +13,6 @@ export async function GET(req: NextRequest, { params }: Params) {
   }
 
   const { id, conceptId } = await params;
-  const kcs = await getKnowledgeComponents(id, conceptId, session.user.id);
-  return NextResponse.json(kcs);
+  const misconceptions = await getMisconceptions(id, conceptId, session.user.id);
+  return NextResponse.json(misconceptions);
 }

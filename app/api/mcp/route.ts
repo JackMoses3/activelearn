@@ -3,14 +3,16 @@ export const runtime = "nodejs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { randomUUID } from "crypto";
+import { createHash } from "crypto";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
 import { slugifyWithHash } from "@/lib/slugify";
 import { stateJsonToRows, rowsToStateJson } from "@/lib/state";
+import { getCourses, getCourseById, getConceptsForCourse } from "@/lib/queries";
 
 // ─── Auth guard ──────────────────────────────────────────────────────────────
 
-async function requireAuth(req: Request): Promise<Response | null> {
+async function requireAuth(req: Request): Promise<{ userId: string } | Response> {
   const authHeader = req.headers.get("authorization") ?? "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
@@ -21,10 +23,13 @@ async function requireAuth(req: Request): Promise<Response | null> {
     );
   }
 
+  // Hash the incoming token before lookup
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+
   const db = getDb();
   const row = await db.execute({
-    sql: "SELECT token FROM oauth_tokens WHERE token = ?",
-    args: [token],
+    sql: "SELECT token, user_id FROM oauth_tokens WHERE token = ?",
+    args: [tokenHash],
   });
 
   if (row.rows.length === 0) {
@@ -34,12 +39,20 @@ async function requireAuth(req: Request): Promise<Response | null> {
     );
   }
 
-  return null;
+  const userId = row.rows[0].user_id as string;
+  if (!userId) {
+    return Response.json(
+      { error: "unauthorized", error_description: "Token not linked to a user" },
+      { status: 401, headers: { "WWW-Authenticate": "Bearer" } }
+    );
+  }
+
+  return { userId };
 }
 
 // ─── MCP server factory ───────────────────────────────────────────────────────
 
-function buildMcpServer(): McpServer {
+function buildMcpServer(userId: string): McpServer {
   const server = new McpServer({
     name: "activelearn",
     version: "1.0.0",
@@ -58,10 +71,10 @@ function buildMcpServer(): McpServer {
       const now = new Date().toISOString();
       const today = now.slice(0, 10);
 
-      // Resolve course_id
+      // Resolve course_id (scoped to user)
       const existing = await db.execute({
-        sql: "SELECT id, name FROM courses WHERE name = ?",
-        args: [course_name],
+        sql: "SELECT id, name FROM courses WHERE name = ? AND user_id = ?",
+        args: [course_name, userId],
       });
 
       let courseId: string;
@@ -74,8 +87,8 @@ function buildMcpServer(): McpServer {
         courseId = slugifyWithHash(course_name, slugSet);
 
         await db.execute({
-          sql: "INSERT INTO courses (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
-          args: [courseId, course_name, today, today],
+          sql: "INSERT INTO courses (id, name, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+          args: [courseId, course_name, userId, today, today],
         });
       }
 
@@ -117,7 +130,7 @@ function buildMcpServer(): McpServer {
 
       const stateJson = rowsToStateJson(course_name, conceptRows, historyRows);
 
-      // Compute routing hint per concept: "i-do" if new/unseen, "diagnostic" if partial/mastered
+      // Compute routing hint per concept
       const routing: Record<string, "i-do" | "diagnostic"> = {};
       for (const c of conceptRows) {
         routing[c.concept_id] =
@@ -136,11 +149,23 @@ function buildMcpServer(): McpServer {
         knowledge_components[cid].push(r.component_text as string);
       }
 
+      // Load observed misconceptions grouped by concept_id
+      const miscRows = await db.execute({
+        sql: "SELECT concept_id, misconception_text FROM misconceptions WHERE course_id = ? ORDER BY created_at ASC",
+        args: [courseId],
+      });
+      const observed_misconceptions: Record<string, string[]> = {};
+      for (const r of miscRows.rows) {
+        const cid = r.concept_id as string;
+        if (!observed_misconceptions[cid]) observed_misconceptions[cid] = [];
+        observed_misconceptions[cid].push(r.misconception_text as string);
+      }
+
       return {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify({ session_id: sessionId, course_id: courseId, state_json: stateJson, routing, knowledge_components }),
+            text: JSON.stringify({ session_id: sessionId, course_id: courseId, state_json: stateJson, routing, knowledge_components, observed_misconceptions }),
           },
         ],
       };
@@ -154,11 +179,20 @@ function buildMcpServer(): McpServer {
     {
       course_id: z.string(),
       graph_json: z.string().describe(
-        "JSON object: { concepts: { [id]: { bloom_level?, prerequisites?: string[], misconceptions?: string[] } } }"
+        "JSON object: { concepts: { [id]: { bloom_level?, prerequisites?: string[] } } }"
       ),
     },
     async ({ course_id, graph_json }) => {
-      let graph: Record<string, { bloom_level?: string; prerequisites?: string[]; misconceptions?: string[] }>;
+      // Verify course belongs to user
+      const course = await getCourseById(course_id, userId);
+      if (!course) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "Course not found" }) }],
+          isError: true,
+        };
+      }
+
+      let graph: Record<string, { bloom_level?: string; prerequisites?: string[] }>;
       try {
         const parsed = JSON.parse(graph_json);
         graph = parsed.concepts ?? parsed;
@@ -179,18 +213,16 @@ function buildMcpServer(): McpServer {
       const statements = conceptIds.map((conceptId) => {
         const node = graph[conceptId];
         return {
-          sql: `INSERT INTO concept_mastery (course_id, concept_id, bloom_level, prerequisites, misconceptions, status)
-                VALUES (?, ?, ?, ?, ?, 'unknown')
+          sql: `INSERT INTO concept_mastery (course_id, concept_id, bloom_level, prerequisites, status)
+                VALUES (?, ?, ?, ?, 'unknown')
                 ON CONFLICT (course_id, concept_id) DO UPDATE SET
                   bloom_level = excluded.bloom_level,
-                  prerequisites = excluded.prerequisites,
-                  misconceptions = excluded.misconceptions`,
+                  prerequisites = excluded.prerequisites`,
           args: [
             course_id,
             conceptId,
             node.bloom_level ?? null,
             node.prerequisites ? JSON.stringify(node.prerequisites) : null,
-            node.misconceptions ? JSON.stringify(node.misconceptions) : null,
           ],
         };
       });
@@ -212,6 +244,15 @@ function buildMcpServer(): McpServer {
       state_json: z.string().describe("JSON blob in v1 format: { [course_name]: { concepts: {...} } }"),
     },
     async ({ course_id, state_json }) => {
+      // Verify course belongs to user
+      const course = await getCourseById(course_id, userId);
+      if (!course) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "Course not found" }) }],
+          isError: true,
+        };
+      }
+
       let parsed;
       try {
         parsed = JSON.parse(state_json);
@@ -226,20 +267,7 @@ function buildMcpServer(): McpServer {
         return { content: [{ type: "text" as const, text: JSON.stringify({ ok: true }) }] };
       }
 
-      // Resolve course name from DB
-      const courseRow = await db.execute({
-        sql: "SELECT name FROM courses WHERE id = ?",
-        args: [course_id],
-      });
-      if (courseRow.rows.length === 0) {
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify({ error: `Course ${course_id} not found` }) }],
-          isError: true,
-        };
-      }
-      const courseName = courseRow.rows[0].name as string;
-
-      const { concepts, history } = stateJsonToRows(course_id, courseName, parsed);
+      const { concepts, history } = stateJsonToRows(course_id, course.name, parsed);
 
       if (concepts.length === 0) {
         return { content: [{ type: "text" as const, text: JSON.stringify({ ok: true }) }] };
@@ -286,14 +314,11 @@ function buildMcpServer(): McpServer {
     "Load the current mastery state for a course, reassembled into state_json format.",
     { course_id: z.string() },
     async ({ course_id }) => {
-      const courseRow = await db.execute({
-        sql: "SELECT name FROM courses WHERE id = ?",
-        args: [course_id],
-      });
-      if (courseRow.rows.length === 0) {
+      // Verify course belongs to user
+      const course = await getCourseById(course_id, userId);
+      if (!course) {
         return { content: [{ type: "text" as const, text: JSON.stringify({}) }] };
       }
-      const courseName = courseRow.rows[0].name as string;
 
       const rows = await db.execute({
         sql: "SELECT * FROM concept_mastery WHERE course_id = ?",
@@ -323,7 +348,7 @@ function buildMcpServer(): McpServer {
         rating: r.rating as string | null,
       }));
 
-      const stateJson = rowsToStateJson(courseName, conceptRows, historyRows);
+      const stateJson = rowsToStateJson(course.name, conceptRows, historyRows);
       return { content: [{ type: "text" as const, text: JSON.stringify(stateJson) }] };
     }
   );
@@ -334,39 +359,23 @@ function buildMcpServer(): McpServer {
     "List all courses with aggregate mastery statistics.",
     {},
     async () => {
-      const result = await db.execute({
-        sql: `SELECT
-          c.id, c.name,
-          (SELECT COUNT(*) FROM sessions s WHERE s.course_id = c.id) as session_count,
-          COUNT(cm.concept_id) as total,
-          SUM(CASE WHEN cm.status='mastered' THEN 1 ELSE 0 END) as mastered,
-          SUM(CASE WHEN cm.status='partial' THEN 1 ELSE 0 END) as partial,
-          SUM(CASE WHEN cm.status='seen' THEN 1 ELSE 0 END) as seen,
-          SUM(CASE WHEN cm.status='unknown' THEN 1 ELSE 0 END) as unknown,
-          SUM(CASE WHEN cm.next_review <= date('now') THEN 1 ELSE 0 END) as due_today
-        FROM courses c
-        LEFT JOIN concept_mastery cm ON cm.course_id = c.id
-        GROUP BY c.id, c.name`,
-        args: [],
-      });
+      const courses = await getCourses(userId);
 
-      const courses = result.rows.map((r) => ({
-        id: r.id,
-        name: r.name,
-        session_count: r.session_count,
-        total: r.total ?? 0,
-        mastered: r.mastered ?? 0,
-        partial: r.partial ?? 0,
-        seen: r.seen ?? 0,
-        unknown: r.unknown ?? 0,
-        due_today: r.due_today ?? 0,
+      const result = courses.map((c) => ({
+        id: c.id,
+        name: c.name,
+        session_count: c.session_count,
+        total: c.total,
+        mastered: c.mastered,
+        partial: c.partial,
+        seen: c.seen,
+        unknown: c.unknown,
+        due_today: c.due_today,
         aggregate_mastery:
-          (r.total as number) > 0
-            ? Math.round(((r.mastered as number) / (r.total as number)) * 100)
-            : 0,
+          c.total > 0 ? Math.round((c.mastered / c.total) * 100) : 0,
       }));
 
-      return { content: [{ type: "text" as const, text: JSON.stringify(courses) }] };
+      return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
     }
   );
 
@@ -379,6 +388,12 @@ function buildMcpServer(): McpServer {
       concept_id: z.string(),
     },
     async ({ course_id, concept_id }) => {
+      // Verify course belongs to user
+      const course = await getCourseById(course_id, userId);
+      if (!course) {
+        return { content: [{ type: "text" as const, text: "null" }] };
+      }
+
       const row = await db.execute({
         sql: "SELECT * FROM concept_mastery WHERE course_id = ? AND concept_id = ?",
         args: [course_id, concept_id],
@@ -416,9 +431,12 @@ function buildMcpServer(): McpServer {
       concepts_covered: z.array(z.string()).describe("Array of concept_ids covered in this session"),
     },
     async ({ session_id, concepts_covered }) => {
+      // Verify session belongs to user's course
       const sessionRow = await db.execute({
-        sql: "SELECT id, started_at FROM sessions WHERE id = ?",
-        args: [session_id],
+        sql: `SELECT s.id, s.started_at FROM sessions s
+              JOIN courses c ON c.id = s.course_id
+              WHERE s.id = ? AND c.user_id = ?`,
+        args: [session_id, userId],
       });
       if (sessionRow.rows.length === 0) {
         return {
@@ -467,6 +485,15 @@ function buildMcpServer(): McpServer {
       ),
     },
     async ({ course_id, concept_id, session_id, status, mastery_score }) => {
+      // Verify course belongs to user
+      const course = await getCourseById(course_id, userId);
+      if (!course) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "Course not found" }) }],
+          isError: true,
+        };
+      }
+
       const today = new Date().toISOString().slice(0, 10);
       const score =
         mastery_score ??
@@ -515,11 +542,58 @@ function buildMcpServer(): McpServer {
       component_text: z.string().describe("A specific, quotable insight the student has demonstrated understanding of"),
     },
     async ({ course_id, concept_id, session_id, component_text }) => {
+      // Verify course belongs to user
+      const course = await getCourseById(course_id, userId);
+      if (!course) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "Course not found" }) }],
+          isError: true,
+        };
+      }
+
       const now = new Date().toISOString();
       try {
         const result = await db.execute({
           sql: "INSERT INTO knowledge_components (course_id, concept_id, session_id, component_text, created_at) VALUES (?, ?, ?, ?, ?)",
           args: [course_id, concept_id, session_id, component_text, now],
+        });
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ ok: true, id: Number(result.lastInsertRowid) }) }],
+        };
+      } catch {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ ok: false, id: null }) }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // ── record_misconception ────────────────────────────────────────────────
+  server.tool(
+    "record_misconception",
+    "Record a misconception observed during a session. Call silently when the student demonstrates a misunderstanding. Do not announce to the student.",
+    {
+      course_id: z.string(),
+      concept_id: z.string(),
+      session_id: z.string(),
+      misconception_text: z.string().describe("A specific misconception the student demonstrated during this session"),
+    },
+    async ({ course_id, concept_id, session_id, misconception_text }) => {
+      // Verify course belongs to user
+      const course = await getCourseById(course_id, userId);
+      if (!course) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "Course not found" }) }],
+          isError: true,
+        };
+      }
+
+      const now = new Date().toISOString();
+      try {
+        const result = await db.execute({
+          sql: "INSERT INTO misconceptions (course_id, concept_id, session_id, misconception_text, created_at) VALUES (?, ?, ?, ?, ?)",
+          args: [course_id, concept_id, session_id, misconception_text, now],
         });
         return {
           content: [{ type: "text" as const, text: JSON.stringify({ ok: true, id: Number(result.lastInsertRowid) }) }],
@@ -539,10 +613,10 @@ function buildMcpServer(): McpServer {
 // ─── Route handlers ───────────────────────────────────────────────────────────
 
 async function handleMcp(req: Request): Promise<Response> {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const authResult = await requireAuth(req);
+  if (authResult instanceof Response) return authResult;
 
-  const server = buildMcpServer();
+  const server = buildMcpServer(authResult.userId);
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });

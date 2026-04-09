@@ -16,6 +16,39 @@ const db = createClient({
 });
 
 const SCHEMA = `
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  name TEXT,
+  email TEXT UNIQUE,
+  email_verified TEXT,
+  image TEXT
+);
+
+CREATE TABLE IF NOT EXISTS accounts (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  provider_account_id TEXT NOT NULL,
+  refresh_token TEXT,
+  access_token TEXT,
+  expires_at INTEGER,
+  token_type TEXT,
+  scope TEXT,
+  id_token TEXT,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE(provider, provider_account_id)
+);
+
+CREATE TABLE IF NOT EXISTS pending_mcp_auth (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL,
+  redirect_uri TEXT NOT NULL,
+  state TEXT NOT NULL,
+  code_challenge TEXT,
+  expires_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS oauth_clients (
   client_id TEXT PRIMARY KEY,
   redirect_uris TEXT NOT NULL,
@@ -27,18 +60,21 @@ CREATE TABLE IF NOT EXISTS oauth_auth_codes (
   client_id TEXT NOT NULL,
   redirect_uri TEXT NOT NULL,
   code_challenge TEXT,
+  user_id TEXT,
   expires_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS oauth_tokens (
   token TEXT PRIMARY KEY,
   client_id TEXT NOT NULL,
+  user_id TEXT,
   created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS courses (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -49,7 +85,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   started_at TEXT NOT NULL,
   ended_at TEXT,
   duration_minutes INTEGER,
-  FOREIGN KEY (course_id) REFERENCES courses(id)
+  FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS session_concepts (
@@ -71,7 +107,8 @@ CREATE TABLE IF NOT EXISTS concept_mastery (
   bloom_level TEXT,
   prerequisites TEXT,
   misconceptions TEXT,
-  PRIMARY KEY (course_id, concept_id)
+  PRIMARY KEY (course_id, concept_id),
+  FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS mastery_history (
@@ -80,14 +117,16 @@ CREATE TABLE IF NOT EXISTS mastery_history (
   concept_id TEXT NOT NULL,
   date TEXT NOT NULL,
   session_score REAL,
-  rating TEXT
+  rating TEXT,
+  FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS documents (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   course_id TEXT NOT NULL,
   filename TEXT NOT NULL,
-  uploaded_at TEXT NOT NULL
+  uploaded_at TEXT NOT NULL,
+  FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS knowledge_components (
@@ -97,7 +136,19 @@ CREATE TABLE IF NOT EXISTS knowledge_components (
   session_id TEXT NOT NULL,
   component_text TEXT NOT NULL,
   created_at TEXT NOT NULL,
-  FOREIGN KEY (course_id) REFERENCES courses(id)
+  FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_courses_user_id ON courses(user_id);
+
+CREATE TABLE IF NOT EXISTS misconceptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  course_id TEXT NOT NULL,
+  concept_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  misconception_text TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (course_id, concept_id) REFERENCES concept_mastery(course_id, concept_id) ON DELETE CASCADE
 );
 `;
 

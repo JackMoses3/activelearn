@@ -8,11 +8,11 @@ interface Params {
 
 export async function GET(req: NextRequest, { params }: Params) {
   const session = await auth();
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { id, conceptId } = await params;
-  const history = await getConceptHistory(id, conceptId);
+  const history = await getConceptHistory(id, conceptId, session.user.id);
   return NextResponse.json(history);
 }

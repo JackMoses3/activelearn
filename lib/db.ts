@@ -8,6 +8,7 @@ export function getDb() {
       url: process.env.TURSO_DATABASE_URL!,
       authToken: process.env.TURSO_AUTH_TOKEN,
     });
+    _client.execute("PRAGMA foreign_keys = ON;");
   }
   return _client;
 }

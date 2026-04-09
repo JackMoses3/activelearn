@@ -43,7 +43,7 @@ export interface MasteryHistoryEntry {
   rating: string | null;
 }
 
-export async function getCourses(): Promise<CourseStats[]> {
+export async function getCourses(userId: string): Promise<CourseStats[]> {
   const db = getDb();
   const result = await db.execute({
     sql: `SELECT
@@ -57,9 +57,10 @@ export async function getCourses(): Promise<CourseStats[]> {
       SUM(CASE WHEN cm.next_review <= date('now') AND cm.next_review IS NOT NULL THEN 1 ELSE 0 END) as due_today
     FROM courses c
     LEFT JOIN concept_mastery cm ON cm.course_id = c.id
+    WHERE c.user_id = ?
     GROUP BY c.id, c.name, c.updated_at
     ORDER BY c.updated_at DESC`,
-    args: [],
+    args: [userId],
   });
 
   return result.rows.map((r) => ({
@@ -76,7 +77,7 @@ export async function getCourses(): Promise<CourseStats[]> {
   }));
 }
 
-export async function getRecentSessions(limit = 10): Promise<Session[]> {
+export async function getRecentSessions(userId: string, limit = 10): Promise<Session[]> {
   const db = getDb();
   const result = await db.execute({
     sql: `SELECT
@@ -85,9 +86,10 @@ export async function getRecentSessions(limit = 10): Promise<Session[]> {
       (SELECT COUNT(*) FROM session_concepts sc WHERE sc.session_id = s.id) as concepts_count
     FROM sessions s
     JOIN courses c ON c.id = s.course_id
+    WHERE c.user_id = ?
     ORDER BY s.started_at DESC
     LIMIT ?`,
-    args: [limit],
+    args: [userId, limit],
   });
 
   return result.rows.map((r) => ({
@@ -101,21 +103,24 @@ export async function getRecentSessions(limit = 10): Promise<Session[]> {
   }));
 }
 
-export async function getCourseById(id: string): Promise<{ id: string; name: string } | null> {
+export async function getCourseById(id: string, userId: string): Promise<{ id: string; name: string } | null> {
   const db = getDb();
   const result = await db.execute({
-    sql: "SELECT id, name FROM courses WHERE id = ?",
-    args: [id],
+    sql: "SELECT id, name FROM courses WHERE id = ? AND user_id = ?",
+    args: [id, userId],
   });
   if (result.rows.length === 0) return null;
   return { id: result.rows[0].id as string, name: result.rows[0].name as string };
 }
 
-export async function getConceptsForCourse(courseId: string): Promise<ConceptMastery[]> {
+export async function getConceptsForCourse(courseId: string, userId: string): Promise<ConceptMastery[]> {
   const db = getDb();
   const result = await db.execute({
-    sql: "SELECT * FROM concept_mastery WHERE course_id = ? ORDER BY concept_id",
-    args: [courseId],
+    sql: `SELECT cm.* FROM concept_mastery cm
+          JOIN courses c ON c.id = cm.course_id
+          WHERE cm.course_id = ? AND c.user_id = ?
+          ORDER BY cm.concept_id`,
+    args: [courseId, userId],
   });
 
   return result.rows.map((r) => ({
@@ -135,12 +140,17 @@ export async function getConceptsForCourse(courseId: string): Promise<ConceptMas
 
 export async function getConceptHistory(
   courseId: string,
-  conceptId: string
+  conceptId: string,
+  userId: string
 ): Promise<MasteryHistoryEntry[]> {
   const db = getDb();
   const result = await db.execute({
-    sql: "SELECT date, session_score, rating FROM mastery_history WHERE course_id = ? AND concept_id = ? ORDER BY date DESC",
-    args: [courseId, conceptId],
+    sql: `SELECT mh.date, mh.session_score, mh.rating
+          FROM mastery_history mh
+          JOIN courses c ON c.id = mh.course_id
+          WHERE mh.course_id = ? AND mh.concept_id = ? AND c.user_id = ?
+          ORDER BY mh.date DESC`,
+    args: [courseId, conceptId, userId],
   });
 
   return result.rows.map((r) => ({
@@ -160,12 +170,17 @@ export interface KnowledgeComponent {
 
 export async function getKnowledgeComponents(
   courseId: string,
-  conceptId: string
+  conceptId: string,
+  userId: string
 ): Promise<KnowledgeComponent[]> {
   const db = getDb();
   const result = await db.execute({
-    sql: "SELECT id, concept_id, component_text, session_id, created_at FROM knowledge_components WHERE course_id = ? AND concept_id = ? ORDER BY created_at ASC",
-    args: [courseId, conceptId],
+    sql: `SELECT kc.id, kc.concept_id, kc.component_text, kc.session_id, kc.created_at
+          FROM knowledge_components kc
+          JOIN courses c ON c.id = kc.course_id
+          WHERE kc.course_id = ? AND kc.concept_id = ? AND c.user_id = ?
+          ORDER BY kc.created_at ASC`,
+    args: [courseId, conceptId, userId],
   });
 
   return result.rows.map((r) => ({
@@ -177,7 +192,39 @@ export async function getKnowledgeComponents(
   }));
 }
 
-export async function getSessionsForCourse(courseId: string): Promise<Session[]> {
+export interface Misconception {
+  id: number;
+  concept_id: string;
+  session_id: string;
+  misconception_text: string;
+  created_at: string;
+}
+
+export async function getMisconceptions(
+  courseId: string,
+  conceptId: string,
+  userId: string
+): Promise<Misconception[]> {
+  const db = getDb();
+  const result = await db.execute({
+    sql: `SELECT m.id, m.concept_id, m.session_id, m.misconception_text, m.created_at
+          FROM misconceptions m
+          JOIN courses c ON c.id = m.course_id
+          WHERE m.course_id = ? AND m.concept_id = ? AND c.user_id = ?
+          ORDER BY m.created_at ASC`,
+    args: [courseId, conceptId, userId],
+  });
+
+  return result.rows.map((r) => ({
+    id: r.id as number,
+    concept_id: r.concept_id as string,
+    session_id: r.session_id as string,
+    misconception_text: r.misconception_text as string,
+    created_at: r.created_at as string,
+  }));
+}
+
+export async function getSessionsForCourse(courseId: string, userId: string): Promise<Session[]> {
   const db = getDb();
   const result = await db.execute({
     sql: `SELECT
@@ -186,9 +233,9 @@ export async function getSessionsForCourse(courseId: string): Promise<Session[]>
       (SELECT COUNT(*) FROM session_concepts sc WHERE sc.session_id = s.id) as concepts_count
     FROM sessions s
     JOIN courses c ON c.id = s.course_id
-    WHERE s.course_id = ?
+    WHERE s.course_id = ? AND c.user_id = ?
     ORDER BY s.started_at DESC`,
-    args: [courseId],
+    args: [courseId, userId],
   });
 
   return result.rows.map((r) => ({
