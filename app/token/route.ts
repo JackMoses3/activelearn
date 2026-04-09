@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { randomUUID } from "crypto";
+import { randomBytes, createHash } from "crypto";
+
+export const dynamic = "force-dynamic";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -59,16 +61,18 @@ export async function POST(req: NextRequest) {
   // Delete used code (single-use)
   await db.execute({ sql: "DELETE FROM oauth_auth_codes WHERE code = ?", args: [code] });
 
-  // Issue access token
-  const accessToken = randomUUID();
+  // Generate token: 256 bits of entropy, store SHA-256 hash
+  const rawToken = randomBytes(32).toString("hex");
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+
   await db.execute({
-    sql: "INSERT INTO oauth_tokens (token, client_id, created_at) VALUES (?, ?, ?)",
-    args: [accessToken, client_id, new Date().toISOString()],
+    sql: "INSERT INTO oauth_tokens (token, client_id, user_id, created_at) VALUES (?, ?, ?, ?)",
+    args: [tokenHash, client_id, (authCode.user_id as string) ?? null, new Date().toISOString()],
   });
 
   return NextResponse.json(
     {
-      access_token: accessToken,
+      access_token: rawToken,
       token_type: "Bearer",
       scope: "mcp",
     },

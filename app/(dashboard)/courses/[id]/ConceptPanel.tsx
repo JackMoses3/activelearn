@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ConceptMastery, KnowledgeComponent, MasteryHistoryEntry } from "@/lib/queries";
+import { ConceptMastery, KnowledgeComponent, MasteryHistoryEntry, Misconception } from "@/lib/queries";
 
 function toTitleCase(str: string): string {
   return str.replace(/\b\w/g, (c) => c.toUpperCase());
@@ -46,6 +46,7 @@ function isOverdue(nextReview: string | null): boolean {
 export function ConceptPanel({ courseId, concept, allConcepts, onClose }: Props) {
   const [history, setHistory] = useState<MasteryHistoryEntry[]>([]);
   const [kcs, setKcs] = useState<KnowledgeComponent[]>([]);
+  const [misconceptions, setMisconceptions] = useState<Misconception[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
   useEffect(() => {
@@ -53,14 +54,17 @@ export function ConceptPanel({ courseId, concept, allConcepts, onClose }: Props)
     Promise.all([
       fetch(`/api/dashboard/courses/${courseId}/concepts/${concept.concept_id}/history`).then((r) => r.json()),
       fetch(`/api/dashboard/courses/${courseId}/concepts/${concept.concept_id}/knowledge-components`).then((r) => r.json()),
+      fetch(`/api/dashboard/courses/${courseId}/concepts/${concept.concept_id}/misconceptions`).then((r) => r.json()),
     ])
-      .then(([histData, kcsData]) => {
+      .then(([histData, kcsData, miscData]) => {
         setHistory(histData);
         setKcs(kcsData);
+        setMisconceptions(miscData);
       })
       .catch(() => {
         setHistory([]);
         setKcs([]);
+        setMisconceptions([]);
       })
       .finally(() => setLoadingHistory(false));
   }, [courseId, concept.concept_id]);
@@ -71,11 +75,6 @@ export function ConceptPanel({ courseId, concept, allConcepts, onClose }: Props)
   let prereqs: string[] = [];
   try {
     prereqs = concept.prerequisites ? JSON.parse(concept.prerequisites) : [];
-  } catch {}
-
-  let misconceptions: string[] = [];
-  try {
-    misconceptions = concept.misconceptions ? JSON.parse(concept.misconceptions) : [];
   } catch {}
 
   const getPrereqStatus = (id: string) =>
@@ -213,19 +212,21 @@ export function ConceptPanel({ courseId, concept, allConcepts, onClose }: Props)
           </div>
         </div>
 
-        {/* Misconceptions */}
+        {/* Observed Misconceptions */}
         {misconceptions.length > 0 && (
           <div className="space-y-2.5">
             <span className="text-[10px] uppercase font-bold tracking-[0.15em] text-on-surface-variant/40">
-              Misconceptions
+              Observed Misconceptions
             </span>
             <ul className="space-y-2">
-              {misconceptions.map((m, i) => (
-                <li
-                  key={i}
-                  className="text-[11px] leading-relaxed text-on-surface-variant italic border-l-2 border-secondary/25 pl-3"
-                >
-                  "{m}"
+              {misconceptions.map((m) => (
+                <li key={m.id} className="flex flex-col gap-0.5">
+                  <span className="text-[11px] leading-relaxed text-on-surface-variant italic border-l-2 border-error/25 pl-3">
+                    &ldquo;{m.misconception_text}&rdquo;
+                  </span>
+                  <span className="text-[9px] text-on-surface-variant/40 pl-3">
+                    {new Date(m.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </span>
                 </li>
               ))}
             </ul>

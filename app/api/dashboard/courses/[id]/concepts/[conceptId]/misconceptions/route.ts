@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getConceptHistory } from "@/lib/queries";
+import { getMisconceptions } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +15,6 @@ export async function GET(req: NextRequest, { params }: Params) {
   }
 
   const { id, conceptId } = await params;
-  const history = await getConceptHistory(id, conceptId, session.user.id);
-  return NextResponse.json(history);
+  const misconceptions = await getMisconceptions(id, conceptId, session.user.id);
+  return NextResponse.json(misconceptions);
 }
