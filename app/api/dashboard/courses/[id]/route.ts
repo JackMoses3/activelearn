@@ -3,6 +3,8 @@ import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
 import { getConceptsForCourse, getCourseById } from "@/lib/queries";
 
+export const dynamic = "force-dynamic";
+
 interface Params {
   params: Promise<{ id: string }>;
 }

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getKnowledgeComponents } from "@/lib/queries";
 
+export const dynamic = "force-dynamic";
+
 interface Params {
   params: Promise<{ id: string; conceptId: string }>;
 }

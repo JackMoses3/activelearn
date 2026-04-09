@@ -3,6 +3,8 @@ import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
 import { randomUUID } from "crypto";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {

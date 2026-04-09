@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { randomUUID } from "crypto";
 
+export const dynamic = "force-dynamic";
+
 const BASE = process.env.NEXTAUTH_URL ?? "https://activelearn.vercel.app";
 
 export async function GET(req: NextRequest) {
