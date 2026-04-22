@@ -224,6 +224,140 @@ export async function getMisconceptions(
   }));
 }
 
+export interface Assessment {
+  id: number;
+  name: string;
+  date: string;
+  type: string;
+  notes: string | null;
+  concept_ids: string[];
+  readiness: number | null;
+  floor: number | null;
+}
+
+export async function getAssessmentsForCourse(courseId: string, userId: string): Promise<Assessment[]> {
+  const db = getDb();
+
+  // Verify course ownership
+  const course = await db.execute({
+    sql: "SELECT id FROM courses WHERE id = ? AND user_id = ?",
+    args: [courseId, userId],
+  });
+  if (course.rows.length === 0) return [];
+
+  const assessments = await db.execute({
+    sql: `SELECT a.id, a.name, a.date, a.type, a.notes
+          FROM assessments a
+          WHERE a.course_id = ?
+          ORDER BY a.date ASC`,
+    args: [courseId],
+  });
+
+  const result: Assessment[] = [];
+  for (const a of assessments.rows) {
+    const links = await db.execute({
+      sql: `SELECT ca.concept_id, cm.mastery_score
+            FROM concept_assessments ca
+            LEFT JOIN concept_mastery cm ON cm.course_id = ca.course_id AND cm.concept_id = ca.concept_id
+            WHERE ca.assessment_id = ?`,
+      args: [a.id],
+    });
+
+    const conceptIds = links.rows.map((r) => r.concept_id as string);
+    const scores = links.rows.map((r) => (r.mastery_score as number) ?? 0);
+    const readiness = scores.length > 0 ? scores.reduce((sum, s) => sum + s, 0) / scores.length : null;
+    const floor = scores.length > 0 ? Math.min(...scores) : null;
+
+    result.push({
+      id: a.id as number,
+      name: a.name as string,
+      date: a.date as string,
+      type: a.type as string,
+      notes: a.notes as string | null,
+      concept_ids: conceptIds,
+      readiness: readiness !== null ? Math.round(readiness * 100) / 100 : null,
+      floor: floor !== null ? Math.round(floor * 100) / 100 : null,
+    });
+  }
+
+  return result;
+}
+
+export interface StudyPlanItem {
+  assessment_name: string;
+  course_name: string;
+  course_id: string;
+  date: string;
+  readiness: number;
+  floor: number;
+  days_until: number;
+  priority: number;
+  weak_concepts: Array<{ concept_id: string; mastery_score: number }>;
+}
+
+export async function getStudyPlan(userId: string): Promise<StudyPlanItem[]> {
+  const db = getDb();
+
+  const today = new Date().toISOString().slice(0, 10);
+  const thirtyDaysOut = new Date();
+  thirtyDaysOut.setDate(thirtyDaysOut.getDate() + 30);
+  const cutoff = thirtyDaysOut.toISOString().slice(0, 10);
+
+  const assessments = await db.execute({
+    sql: `SELECT a.id, a.name, a.date, a.course_id, c.name as course_name
+          FROM assessments a
+          JOIN courses c ON c.id = a.course_id
+          WHERE c.user_id = ? AND a.date >= ? AND a.date <= ?
+          ORDER BY a.date ASC`,
+    args: [userId, today, cutoff],
+  });
+
+  const items: StudyPlanItem[] = [];
+  for (const a of assessments.rows) {
+    const links = await db.execute({
+      sql: `SELECT ca.concept_id, cm.mastery_score
+            FROM concept_assessments ca
+            LEFT JOIN concept_mastery cm ON cm.course_id = ca.course_id AND cm.concept_id = ca.concept_id
+            WHERE ca.assessment_id = ?`,
+      args: [a.id],
+    });
+
+    const scores = links.rows.map((r) => ({
+      concept_id: r.concept_id as string,
+      mastery_score: (r.mastery_score as number) ?? 0,
+    }));
+
+    if (scores.length === 0) continue;
+
+    const readiness = scores.reduce((s, c) => s + c.mastery_score, 0) / scores.length;
+    const floor = Math.min(...scores.map((c) => c.mastery_score));
+    const daysUntil = Math.max(1, Math.ceil((new Date(a.date as string).getTime() - Date.now()) / 86400000));
+
+    const urgencyWeight = 1 / Math.sqrt(daysUntil);
+    const priority = (1 - readiness) * urgencyWeight;
+
+    const weakConcepts = scores
+      .filter((c) => c.mastery_score < 0.7)
+      .sort((x, y) => x.mastery_score - y.mastery_score)
+      .slice(0, 5);
+
+    items.push({
+      assessment_name: a.name as string,
+      course_name: a.course_name as string,
+      course_id: a.course_id as string,
+      date: a.date as string,
+      readiness: Math.round(readiness * 100) / 100,
+      floor: Math.round(floor * 100) / 100,
+      days_until: daysUntil,
+      priority: Math.round(priority * 1000) / 1000,
+      weak_concepts: weakConcepts,
+    });
+  }
+
+  items.sort((a, b) => b.priority - a.priority);
+  return items.slice(0, 10);
+}
+
 export async function getSessionsForCourse(courseId: string, userId: string): Promise<Session[]> {
   const db = getDb();
   const result = await db.execute({

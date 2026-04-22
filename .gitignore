@@ -48,3 +48,9 @@ memory/
 MEMORY.md
 .gstack/
 .claude/skills/gstack/
+
+# Local AI wiki and Claude local-only files
+wiki/
+.raw/
+WIKI.md
+.claude/

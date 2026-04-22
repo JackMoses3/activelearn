@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Trash2 } from "lucide-react";
-import { CourseStats, Session } from "@/lib/queries";
+import { CourseStats, Session, StudyPlanItem } from "@/lib/queries";
 
 const MONO: React.CSSProperties = { fontFamily: "'Geist Mono', monospace" };
 const DISPLAY: React.CSSProperties = { fontFamily: "'Fraunces', serif" };
@@ -11,6 +11,7 @@ const DISPLAY: React.CSSProperties = { fontFamily: "'Fraunces', serif" };
 interface Props {
   initialCourses: CourseStats[];
   initialSessions: Session[];
+  initialStudyPlan: StudyPlanItem[];
 }
 
 function isSessionActive(session: Session): boolean {
@@ -49,9 +50,83 @@ function MasteryBar({ mastered, partial, seen, total }: { mastered: number; part
   );
 }
 
-export function CoursesClient({ initialCourses, initialSessions }: Props) {
+function StudyWidget({ items }: { items: StudyPlanItem[] }) {
+  if (items.length === 0) {
+    return (
+      <div
+        className="max-w-4xl py-8 px-6 flex flex-col items-center gap-2 rounded-xl"
+        style={{ background: "#f6f4ec" }}
+      >
+        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant/50" style={MONO}>
+          No assessments yet
+        </span>
+        <p className="text-sm text-on-surface-variant/60 text-center">
+          Ask Claude to import your syllabus to set up assessments and study plans.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl flex flex-col gap-3">
+      {items.slice(0, 5).map((item, i) => (
+        <Link
+          key={`${item.course_id}-${item.assessment_name}-${i}`}
+          href={`/courses/${item.course_id}`}
+          className="bg-surface-container-lowest rounded-xl p-5 flex items-center gap-5 transition-shadow hover:shadow-md"
+          style={{ boxShadow: "0 1px 4px rgba(43,34,32,0.07)" }}
+        >
+          <div className="flex flex-col gap-1 flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-[15px] text-primary truncate">{item.assessment_name}</span>
+              <span
+                className="shrink-0 text-[9px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-sm"
+                style={{ ...MONO, background: "rgba(91,74,200,0.12)", color: "#5b4ac8" }}
+              >
+                {item.course_name}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] text-on-surface-variant/70" style={MONO}>
+                {item.days_until === 1 ? "Tomorrow" : `${item.days_until} days`}
+              </span>
+              <span className="text-[11px] text-on-surface-variant/50" style={MONO}>
+                {item.date}
+              </span>
+              {item.weak_concepts.length > 0 && (
+                <span className="text-[11px] text-on-surface-variant/50" style={MONO}>
+                  {item.weak_concepts.length} weak concept{item.weak_concepts.length !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-0.5 shrink-0">
+            <span className="text-[9px] font-semibold uppercase tracking-widest text-on-surface-variant/50" style={MONO}>
+              Readiness
+            </span>
+            <span
+              className="text-[18px] font-bold leading-tight"
+              style={{
+                fontFamily: "'Geist Mono', monospace",
+                color: item.readiness >= 0.7 ? "#2b2220" : item.readiness >= 0.4 ? "#5b4ac8" : "#ba1a1a",
+              }}
+            >
+              {(item.readiness * 100).toFixed(0)}%
+            </span>
+            <span className="text-[9px] text-on-surface-variant/40" style={MONO}>
+              floor {(item.floor * 100).toFixed(0)}%
+            </span>
+          </div>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+export function CoursesClient({ initialCourses, initialSessions, initialStudyPlan }: Props) {
   const [courses, setCourses] = useState(initialCourses);
   const [sessions, setSessions] = useState(initialSessions);
+  const [studyPlan, setStudyPlan] = useState(initialStudyPlan);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -73,11 +148,18 @@ export function CoursesClient({ initialCourses, initialSessions }: Props) {
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
-        const res = await fetch("/api/dashboard/courses");
-        if (res.ok) {
-          const data = await res.json();
+        const [coursesRes, planRes] = await Promise.all([
+          fetch("/api/dashboard/courses"),
+          fetch("/api/dashboard/study-plan"),
+        ]);
+        if (coursesRes.ok) {
+          const data = await coursesRes.json();
           setCourses(data.courses);
           setSessions(data.sessions);
+        }
+        if (planRes.ok) {
+          const data = await planRes.json();
+          setStudyPlan(data.plan);
         }
       } catch {
         // silent — stale data is fine
@@ -97,6 +179,19 @@ export function CoursesClient({ initialCourses, initialSessions }: Props) {
         <h2 className="text-[32px] font-bold tracking-tight text-primary leading-tight" style={DISPLAY}>
           Active Courses
         </h2>
+      </section>
+
+      {/* Study Plan Widget */}
+      <section className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant/50" style={MONO}>
+            Study Planner
+          </span>
+          <h3 className="text-[22px] font-bold text-primary" style={DISPLAY}>
+            What to Study Today
+          </h3>
+        </div>
+        <StudyWidget items={studyPlan} />
       </section>
 
       {/* Course Grid */}

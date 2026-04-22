@@ -150,6 +150,31 @@ CREATE TABLE IF NOT EXISTS misconceptions (
   created_at TEXT NOT NULL,
   FOREIGN KEY (course_id, concept_id) REFERENCES concept_mastery(course_id, concept_id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS assessments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  course_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  date TEXT NOT NULL,
+  type TEXT DEFAULT 'exam',
+  notes TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+  UNIQUE (course_id, name, date)
+);
+
+CREATE TABLE IF NOT EXISTS concept_assessments (
+  assessment_id INTEGER NOT NULL,
+  concept_id TEXT NOT NULL,
+  course_id TEXT NOT NULL,
+  weight REAL DEFAULT 1.0,
+  PRIMARY KEY (assessment_id, concept_id),
+  FOREIGN KEY (assessment_id) REFERENCES assessments(id) ON DELETE CASCADE,
+  FOREIGN KEY (course_id, concept_id) REFERENCES concept_mastery(course_id, concept_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_assessments_course_date ON assessments(course_id, date);
+CREATE INDEX IF NOT EXISTS idx_concept_assessments_assessment ON concept_assessments(assessment_id);
 `;
 
 async function migrate() {

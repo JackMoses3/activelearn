@@ -1,6 +1,7 @@
 import { createClient } from "@libsql/client";
 
 let _client: ReturnType<typeof createClient> | null = null;
+let _pragmaReady: Promise<void> | null = null;
 
 export function getDb() {
   if (!_client) {
@@ -14,7 +15,13 @@ export function getDb() {
       url,
       authToken: process.env.TURSO_AUTH_TOKEN,
     });
-    _client.execute("PRAGMA foreign_keys = ON;");
+    _pragmaReady = _client.execute("PRAGMA foreign_keys = ON;").then(() => {});
   }
   return _client;
+}
+
+/** Await this before queries that depend on FK enforcement. */
+export async function ensureForeignKeys(): Promise<void> {
+  getDb();
+  await _pragmaReady;
 }

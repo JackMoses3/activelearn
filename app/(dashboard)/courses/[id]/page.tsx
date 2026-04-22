@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { getCourseById, getConceptsForCourse, getSessionsForCourse } from "@/lib/queries";
+import { getCourseById, getConceptsForCourse, getSessionsForCourse, getAssessmentsForCourse } from "@/lib/queries";
 import { CourseDetailClient } from "./CourseDetailClient";
 
 export const dynamic = "force-dynamic";
@@ -16,10 +16,11 @@ export default async function CourseDetailPage({ params }: Props) {
   const { id } = await params;
   const userId = session.user.id;
 
-  const [course, concepts, sessions] = await Promise.all([
+  const [course, concepts, sessions, assessments] = await Promise.all([
     getCourseById(id, userId),
     getConceptsForCourse(id, userId),
     getSessionsForCourse(id, userId),
+    getAssessmentsForCourse(id, userId),
   ]);
 
   if (!course) notFound();
@@ -29,6 +30,7 @@ export default async function CourseDetailPage({ params }: Props) {
       course={course}
       initialConcepts={concepts}
       initialSessions={sessions}
+      initialAssessments={assessments}
     />
   );
 }
