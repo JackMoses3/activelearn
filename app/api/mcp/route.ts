@@ -607,6 +607,370 @@ function buildMcpServer(userId: string): McpServer {
     }
   );
 
+  // ── save_assessment ──────────────────────────────────────────────────────
+  server.tool(
+    "save_assessment",
+    "Save an exam, assignment, or quiz with its date and linked concepts. Claude should resolve concept_ids from load_state before calling this. Upserts on (course_id, name, date).",
+    {
+      course_id: z.string(),
+      name: z.string().describe("Assessment name, e.g. 'Midterm Exam'"),
+      date: z.string().describe("ISO date string, e.g. '2026-05-15'"),
+      type: z.enum(["exam", "assignment", "quiz", "other"]).optional().default("exam"),
+      concept_ids: z.array(z.string()).describe("Concept IDs this assessment covers"),
+      notes: z.string().optional(),
+    },
+    async ({ course_id, name: assessmentName, date, type, concept_ids, notes }) => {
+      const course = await getCourseById(course_id, userId);
+      if (!course) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "course_not_found", detail: `Course '${course_id}' not found for this user`, hint: "call list_courses to see valid course IDs" }) }],
+          isError: true,
+        };
+      }
+
+      // Validate date
+      const parsedDate = new Date(date);
+      if (isNaN(parsedDate.getTime())) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "invalid_date", detail: `'${date}' is not a valid ISO date`, hint: "use YYYY-MM-DD format" }) }],
+          isError: true,
+        };
+      }
+      const maxDate = new Date();
+      maxDate.setMonth(maxDate.getMonth() + 18);
+      if (parsedDate > maxDate) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "date_too_far", detail: `Date '${date}' is more than 18 months out`, hint: "assessments must be within 18 months" }) }],
+          isError: true,
+        };
+      }
+
+      // Validate concept_ids exist in this course
+      if (concept_ids.length > 0) {
+        const existingConcepts = await db.execute({
+          sql: "SELECT concept_id FROM concept_mastery WHERE course_id = ?",
+          args: [course_id],
+        });
+        const validIds = new Set(existingConcepts.rows.map((r) => r.concept_id as string));
+        const invalid = concept_ids.filter((cid) => !validIds.has(cid));
+        if (invalid.length > 0) {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify({ error: "invalid_concept_id", detail: `concept_ids not found in course '${course_id}': ${invalid.join(", ")}`, hint: "call load_state or list_courses to see valid concept_ids" }) }],
+            isError: true,
+          };
+        }
+      }
+
+      const now = new Date().toISOString();
+      const isoDate = date.slice(0, 10);
+
+      // Upsert assessment
+      const result = await db.execute({
+        sql: `INSERT INTO assessments (course_id, name, date, type, notes, created_at)
+              VALUES (?, ?, ?, ?, ?, ?)
+              ON CONFLICT (course_id, name, date) DO UPDATE SET
+                type = excluded.type,
+                notes = excluded.notes`,
+        args: [course_id, assessmentName, isoDate, type, notes ?? null, now],
+      });
+
+      const assessmentId = Number(result.lastInsertRowid);
+
+      // Link concepts
+      if (concept_ids.length > 0) {
+        const stmts: Array<{ sql: string; args: (string | number | null)[] }> = [
+          { sql: "DELETE FROM concept_assessments WHERE assessment_id = ?", args: [assessmentId] },
+        ];
+        for (const conceptId of concept_ids) {
+          stmts.push({
+            sql: "INSERT INTO concept_assessments (assessment_id, concept_id, course_id) VALUES (?, ?, ?)",
+            args: [assessmentId, conceptId, course_id],
+          });
+        }
+        await db.batch(stmts);
+      }
+
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify({ ok: true, assessment_id: assessmentId }) }],
+      };
+    }
+  );
+
+  // ── list_assessments ────────────────────────────────────────────────────
+  server.tool(
+    "list_assessments",
+    "List all assessments for a course with readiness scores computed from linked concept mastery.",
+    {
+      course_id: z.string(),
+    },
+    async ({ course_id }) => {
+      const course = await getCourseById(course_id, userId);
+      if (!course) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "course_not_found", detail: `Course '${course_id}' not found`, hint: "call list_courses to see valid course IDs" }) }],
+          isError: true,
+        };
+      }
+
+      const assessments = await db.execute({
+        sql: `SELECT a.id, a.name, a.date, a.type, a.notes
+              FROM assessments a
+              WHERE a.course_id = ?
+              ORDER BY a.date ASC`,
+        args: [course_id],
+      });
+
+      const result = [];
+      for (const a of assessments.rows) {
+        const links = await db.execute({
+          sql: `SELECT ca.concept_id, cm.mastery_score
+                FROM concept_assessments ca
+                LEFT JOIN concept_mastery cm ON cm.course_id = ca.course_id AND cm.concept_id = ca.concept_id
+                WHERE ca.assessment_id = ?`,
+          args: [a.id],
+        });
+
+        const conceptIds = links.rows.map((r) => r.concept_id as string);
+        const scores = links.rows.map((r) => (r.mastery_score as number) ?? 0);
+        const readiness = scores.length > 0 ? scores.reduce((sum, s) => sum + s, 0) / scores.length : null;
+        const floor = scores.length > 0 ? Math.min(...scores) : null;
+
+        result.push({
+          id: a.id as number,
+          name: a.name as string,
+          date: a.date as string,
+          type: a.type as string,
+          notes: a.notes as string | null,
+          concept_ids: conceptIds,
+          readiness: readiness !== null ? Math.round(readiness * 100) / 100 : null,
+          floor: floor !== null ? Math.round(floor * 100) / 100 : null,
+        });
+      }
+
+      return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+    }
+  );
+
+  // ── get_study_plan ──────────────────────────────────────────────────────
+  server.tool(
+    "get_study_plan",
+    "Returns prioritized study recommendations based on upcoming assessments and concept mastery. Shows what to study and why.",
+    {
+      course_id: z.string().optional().describe("Omit for cross-course plan"),
+    },
+    async ({ course_id }) => {
+      const userCourses = await getCourses(userId);
+      const targetCourses = course_id
+        ? userCourses.filter((c) => c.id === course_id)
+        : userCourses;
+
+      if (targetCourses.length === 0) {
+        return { content: [{ type: "text" as const, text: JSON.stringify([]) }] };
+      }
+
+      const courseIds = targetCourses.map((c) => c.id);
+      const placeholders = courseIds.map(() => "?").join(",");
+
+      const today = new Date().toISOString().slice(0, 10);
+      const thirtyDaysOut = new Date();
+      thirtyDaysOut.setDate(thirtyDaysOut.getDate() + 30);
+      const cutoff = thirtyDaysOut.toISOString().slice(0, 10);
+
+      const assessments = await db.execute({
+        sql: `SELECT a.id, a.name, a.date, a.course_id, c.name as course_name
+              FROM assessments a
+              JOIN courses c ON c.id = a.course_id
+              WHERE a.course_id IN (${placeholders}) AND a.date >= ? AND a.date <= ?
+              ORDER BY a.date ASC`,
+        args: [...courseIds, today, cutoff],
+      });
+
+      const items = [];
+      for (const a of assessments.rows) {
+        const links = await db.execute({
+          sql: `SELECT ca.concept_id, cm.mastery_score
+                FROM concept_assessments ca
+                LEFT JOIN concept_mastery cm ON cm.course_id = ca.course_id AND cm.concept_id = ca.concept_id
+                WHERE ca.assessment_id = ?`,
+          args: [a.id],
+        });
+
+        const scores = links.rows.map((r) => ({
+          concept_id: r.concept_id as string,
+          mastery_score: (r.mastery_score as number) ?? 0,
+        }));
+
+        if (scores.length === 0) continue;
+
+        const readiness = scores.reduce((s, c) => s + c.mastery_score, 0) / scores.length;
+        const floor = Math.min(...scores.map((c) => c.mastery_score));
+        const daysUntil = Math.max(1, Math.ceil((new Date(a.date as string).getTime() - Date.now()) / 86400000));
+
+        const urgencyWeight = 1 / Math.sqrt(daysUntil);
+        const priority = (1 - readiness) * urgencyWeight;
+
+        const weakConcepts = scores
+          .filter((c) => c.mastery_score < 0.7)
+          .sort((x, y) => x.mastery_score - y.mastery_score)
+          .slice(0, 5);
+
+        items.push({
+          assessment_name: a.name as string,
+          course_name: a.course_name as string,
+          course_id: a.course_id as string,
+          date: a.date as string,
+          readiness: Math.round(readiness * 100) / 100,
+          floor: Math.round(floor * 100) / 100,
+          days_until: daysUntil,
+          priority: Math.round(priority * 1000) / 1000,
+          weak_concepts: weakConcepts,
+        });
+      }
+
+      items.sort((a, b) => b.priority - a.priority);
+      const top10 = items.slice(0, 10);
+
+      return { content: [{ type: "text" as const, text: JSON.stringify(top10) }] };
+    }
+  );
+
+  // ── update_assessment ───────────────────────────────────────────────────
+  server.tool(
+    "update_assessment",
+    "Update an existing assessment's name, date, type, notes, or linked concepts.",
+    {
+      course_id: z.string(),
+      assessment_id: z.number(),
+      name: z.string().optional(),
+      date: z.string().optional(),
+      type: z.enum(["exam", "assignment", "quiz", "other"]).optional(),
+      concept_ids: z.array(z.string()).optional(),
+      notes: z.string().optional(),
+    },
+    async ({ course_id, assessment_id, name: newName, date, type, concept_ids, notes }) => {
+      const course = await getCourseById(course_id, userId);
+      if (!course) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "course_not_found", detail: `Course '${course_id}' not found`, hint: "call list_courses to see valid course IDs" }) }],
+          isError: true,
+        };
+      }
+
+      const existing = await db.execute({
+        sql: "SELECT id FROM assessments WHERE id = ? AND course_id = ?",
+        args: [assessment_id, course_id],
+      });
+      if (existing.rows.length === 0) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "assessment_not_found", detail: `Assessment ${assessment_id} not found in course '${course_id}'`, hint: "call list_assessments to see valid IDs" }) }],
+          isError: true,
+        };
+      }
+
+      if (date) {
+        const parsedDate = new Date(date);
+        if (isNaN(parsedDate.getTime())) {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify({ error: "invalid_date", detail: `'${date}' is not a valid ISO date`, hint: "use YYYY-MM-DD format" }) }],
+            isError: true,
+          };
+        }
+        const maxDate = new Date();
+        maxDate.setMonth(maxDate.getMonth() + 18);
+        if (parsedDate > maxDate) {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify({ error: "date_too_far", detail: `Date '${date}' is more than 18 months out`, hint: "assessments must be within 18 months" }) }],
+            isError: true,
+          };
+        }
+      }
+
+      if (concept_ids && concept_ids.length > 0) {
+        const existingConcepts = await db.execute({
+          sql: "SELECT concept_id FROM concept_mastery WHERE course_id = ?",
+          args: [course_id],
+        });
+        const validIds = new Set(existingConcepts.rows.map((r) => r.concept_id as string));
+        const invalid = concept_ids.filter((cid) => !validIds.has(cid));
+        if (invalid.length > 0) {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify({ error: "invalid_concept_id", detail: `concept_ids not found: ${invalid.join(", ")}`, hint: "call load_state to see valid concept_ids" }) }],
+            isError: true,
+          };
+        }
+      }
+
+      const stmts: Array<{ sql: string; args: (string | number | null)[] }> = [];
+
+      const setClauses: string[] = [];
+      const setArgs: (string | number | null)[] = [];
+      if (newName !== undefined) { setClauses.push("name = ?"); setArgs.push(newName); }
+      if (date !== undefined) { setClauses.push("date = ?"); setArgs.push(date.slice(0, 10)); }
+      if (type !== undefined) { setClauses.push("type = ?"); setArgs.push(type); }
+      if (notes !== undefined) { setClauses.push("notes = ?"); setArgs.push(notes); }
+
+      if (setClauses.length > 0) {
+        stmts.push({
+          sql: `UPDATE assessments SET ${setClauses.join(", ")} WHERE id = ?`,
+          args: [...setArgs, assessment_id],
+        });
+      }
+
+      if (concept_ids) {
+        stmts.push({ sql: "DELETE FROM concept_assessments WHERE assessment_id = ?", args: [assessment_id] });
+        for (const conceptId of concept_ids) {
+          stmts.push({
+            sql: "INSERT INTO concept_assessments (assessment_id, concept_id, course_id) VALUES (?, ?, ?)",
+            args: [assessment_id, conceptId, course_id],
+          });
+        }
+      }
+
+      if (stmts.length > 0) {
+        await db.batch(stmts);
+      }
+
+      return { content: [{ type: "text" as const, text: JSON.stringify({ ok: true }) }] };
+    }
+  );
+
+  // ── delete_assessment ───────────────────────────────────────────────────
+  server.tool(
+    "delete_assessment",
+    "Delete an assessment by ID. Cascades to concept_assessments links.",
+    {
+      course_id: z.string(),
+      assessment_id: z.number(),
+    },
+    async ({ course_id, assessment_id }) => {
+      const course = await getCourseById(course_id, userId);
+      if (!course) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "course_not_found", detail: `Course '${course_id}' not found`, hint: "call list_courses to see valid course IDs" }) }],
+          isError: true,
+        };
+      }
+
+      const existing = await db.execute({
+        sql: "SELECT id FROM assessments WHERE id = ? AND course_id = ?",
+        args: [assessment_id, course_id],
+      });
+      if (existing.rows.length === 0) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "assessment_not_found", detail: `Assessment ${assessment_id} not found in course '${course_id}'`, hint: "call list_assessments to see valid IDs" }) }],
+          isError: true,
+        };
+      }
+
+      await db.execute({
+        sql: "DELETE FROM assessments WHERE id = ? AND course_id = ?",
+        args: [assessment_id, course_id],
+      });
+
+      return { content: [{ type: "text" as const, text: JSON.stringify({ ok: true }) }] };
+    }
+  );
+
   return server;
 }
 
