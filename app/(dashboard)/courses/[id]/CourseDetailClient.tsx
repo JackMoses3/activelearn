@@ -5,27 +5,37 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConceptMap } from "./ConceptMap";
 import { ConceptPanel } from "./ConceptPanel";
 import { SessionsTab } from "./SessionsTab";
-import { ConceptMastery, Session } from "@/lib/queries";
+import { AssessmentsTab } from "./AssessmentsTab";
+import { ConceptMastery, Session, Assessment } from "@/lib/queries";
 
 interface Props {
   course: { id: string; name: string };
   initialConcepts: ConceptMastery[];
   initialSessions: Session[];
+  initialAssessments: Assessment[];
 }
 
-export function CourseDetailClient({ course, initialConcepts, initialSessions }: Props) {
+export function CourseDetailClient({ course, initialConcepts, initialSessions, initialAssessments }: Props) {
   const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
   const [concepts, setConcepts] = useState(initialConcepts);
+  const [assessments, setAssessments] = useState(initialAssessments);
   const sessions = initialSessions;
 
-  // Poll for updated concept mastery every 30s — picks up incremental saves from Claude
+  // Poll for updated concept mastery + assessments every 30s
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/dashboard/courses/${course.id}`);
-        if (res.ok) {
-          const data = await res.json();
+        const [conceptsRes, assessmentsRes] = await Promise.all([
+          fetch(`/api/dashboard/courses/${course.id}`),
+          fetch(`/api/dashboard/courses/${course.id}/assessments`),
+        ]);
+        if (conceptsRes.ok) {
+          const data = await conceptsRes.json();
           setConcepts(data.concepts);
+        }
+        if (assessmentsRes.ok) {
+          const data = await assessmentsRes.json();
+          setAssessments(data.assessments);
         }
       } catch {
         // silent — stale data is fine
@@ -55,6 +65,7 @@ export function CourseDetailClient({ course, initialConcepts, initialSessions }:
         <TabsList className="bg-surface-container-low shrink-0 justify-start w-full">
           <TabsTrigger value="map">Concept Map</TabsTrigger>
           <TabsTrigger value="sessions">Sessions</TabsTrigger>
+          <TabsTrigger value="assessments">Assessments</TabsTrigger>
         </TabsList>
 
         <TabsContent value="map" className="flex-1 min-h-0 overflow-hidden mt-4 pb-6">
@@ -81,6 +92,10 @@ export function CourseDetailClient({ course, initialConcepts, initialSessions }:
 
         <TabsContent value="sessions" className="flex-1 min-h-0 overflow-y-auto mt-4">
           <SessionsTab sessions={sessions} />
+        </TabsContent>
+
+        <TabsContent value="assessments" className="flex-1 min-h-0 overflow-y-auto mt-4">
+          <AssessmentsTab assessments={assessments} />
         </TabsContent>
       </Tabs>
     </div>

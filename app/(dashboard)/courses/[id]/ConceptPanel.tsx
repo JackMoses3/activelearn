@@ -212,24 +212,44 @@ export function ConceptPanel({ courseId, concept, allConcepts, onClose }: Props)
           </div>
         </div>
 
-        {/* Observed Misconceptions */}
+        {/* Misconception Reflection */}
         {misconceptions.length > 0 && (
           <div className="space-y-2.5">
             <span className="text-[10px] uppercase font-bold tracking-[0.15em] text-on-surface-variant/40">
-              Observed Misconceptions
+              Misconception Reflection
             </span>
-            <ul className="space-y-2">
+            <p className="text-[11px] text-on-surface-variant/50 leading-relaxed">
+              {misconceptions.length} misconception{misconceptions.length !== 1 ? "s" : ""} observed. Review these to avoid repeating them.
+            </p>
+            <ul className="space-y-3">
               {misconceptions.map((m) => (
-                <li key={m.id} className="flex flex-col gap-0.5">
-                  <span className="text-[11px] leading-relaxed text-on-surface-variant italic border-l-2 border-error/25 pl-3">
+                <li key={m.id} className="bg-surface-container-low rounded-lg p-3 space-y-1.5">
+                  <span className="text-[11px] leading-relaxed text-on-surface-variant italic border-l-2 border-error/25 pl-3 block">
                     &ldquo;{m.misconception_text}&rdquo;
                   </span>
-                  <span className="text-[9px] text-on-surface-variant/40 pl-3">
-                    {new Date(m.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  </span>
+                  <details className="text-[11px] text-on-surface-variant/60 pl-3">
+                    <summary className="cursor-pointer hover:text-on-surface-variant transition-colors text-[10px] font-semibold uppercase tracking-wider">
+                      Why this matters
+                    </summary>
+                    <p className="mt-1.5 text-[11px] leading-relaxed text-on-surface-variant/50">
+                      This misconception was observed during a session on{" "}
+                      {new Date(m.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric" })}.
+                      If it recurs, Claude will probe for it during review to ensure it&apos;s resolved.
+                    </p>
+                  </details>
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+        {misconceptions.length === 0 && !loadingHistory && (
+          <div className="space-y-2.5">
+            <span className="text-[10px] uppercase font-bold tracking-[0.15em] text-on-surface-variant/40">
+              Misconception Reflection
+            </span>
+            <p className="text-[11px] text-on-surface-variant/40">
+              No misconceptions recorded yet. Keep studying for more.
+            </p>
           </div>
         )}
 
